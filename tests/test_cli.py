@@ -291,3 +291,21 @@ def test_combined_json_no_save(tmp_path: Path) -> None:
     assert payload["saved"] is False
     assert not (tmp_path / "readings.jsonl").exists()
     assert not (tmp_path / "iching_readings.jsonl").exists()
+
+
+def test_augury_help_mentions_system_chooser(tmp_path: Path) -> None:
+    result = _run(
+        "--help",
+        env={"AUGURY_HOME": str(tmp_path)},
+    )
+    assert "Run `augury` with no subcommand to open the full-screen system chooser." in result.stdout
+    assert "augury combined --query" in result.stdout
+
+
+def test_iching_help_mentions_tui_launch(tmp_path: Path) -> None:
+    result = _run_iching(
+        "--help",
+        env={"AUGURY_HOME": str(tmp_path)},
+    )
+    assert "Run `iching` with no subcommand to open the full-screen I Ching app." in result.stdout
+    assert "iching cast --query" in result.stdout

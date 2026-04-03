@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import textwrap
 from datetime import date
 from typing import Any
 
@@ -218,7 +219,11 @@ def _add_command_parsers(subparsers: Any, *, nested: bool = False) -> None:
 
 
 def add_augury_subparser(subparsers: Any) -> None:
-    iching_parser = subparsers.add_parser("iching", help="Launch the I Ching app or run I Ching commands")
+    iching_parser = subparsers.add_parser(
+        "iching",
+        help="Launch the I Ching app or run I Ching commands",
+        description="Run `augury iching` with no subcommand to launch the full-screen I Ching TUI.",
+    )
     nested = iching_parser.add_subparsers(dest="iching_command")
     _add_command_parsers(nested, nested=True)
 
@@ -239,7 +244,19 @@ def run_augury_args(args: argparse.Namespace) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="iching",
-        description="I Ching reader TUI and CLI.",
+        description=(
+            "I Ching reader TUI and CLI. Run `iching` with no subcommand to open the full-screen I Ching app."
+        ),
+        epilog=textwrap.dedent(
+            """\
+            Examples:
+              iching
+              iching cast --query "What is shifting?"
+              iching daily --date 2026-04-03
+              iching hexagram 24
+            """
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     subparsers = parser.add_subparsers(dest="command")
     _add_command_parsers(subparsers, nested=False)

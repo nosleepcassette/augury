@@ -9,6 +9,7 @@ import re
 import select
 import sys
 import termios
+import textwrap
 import time
 import tty
 from dataclasses import asdict, dataclass, is_dataclass
@@ -2492,7 +2493,20 @@ def _run_combined_command(args: argparse.Namespace) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="augury",
-        description="Augury divination suite with tarot and I Ching interfaces.",
+        description=(
+            "Augury divination suite with tarot, I Ching, and combined reading interfaces. "
+            "Run `augury` with no subcommand to open the full-screen system chooser."
+        ),
+        epilog=textwrap.dedent(
+            """\
+            Examples:
+              augury
+              augury read --spread three-card --query "What should I know?"
+              augury iching cast --query "What is shifting?"
+              augury combined --query "Cross-check this through both systems"
+            """
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     subparsers = parser.add_subparsers(dest="command")
 
@@ -2516,7 +2530,14 @@ def _build_parser() -> argparse.ArgumentParser:
     history_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
     history_parser.add_argument("--limit", type=int, default=25, help="Number of readings to show")
 
-    combined_parser = subparsers.add_parser("combined", help="Run one query through tarot and I Ching together")
+    combined_parser = subparsers.add_parser(
+        "combined",
+        help="Run one query through tarot and I Ching together",
+        description=(
+            "Run a combined reading: one query is sent through the tarot engine and the I Ching engine, "
+            "and the result can be shown side by side or emitted as JSON."
+        ),
+    )
     combined_parser.add_argument("--query", default=None, help="Question or reading prompt")
     combined_parser.add_argument("--spread", default=None, help="Tarot spread name or slug")
     combined_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
@@ -2548,7 +2569,11 @@ def _build_parser() -> argparse.ArgumentParser:
     paths_parser = subparsers.add_parser("paths", help="Show Augury config and data paths")
     paths_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
 
-    tarot_parser = subparsers.add_parser("tarot", help="Launch the tarot app or run tarot commands")
+    tarot_parser = subparsers.add_parser(
+        "tarot",
+        help="Launch the tarot app or run tarot commands",
+        description="Run `augury tarot` with no subcommand to launch the tarot TUI.",
+    )
     tarot_subparsers = tarot_parser.add_subparsers(dest="tarot_command")
 
     tarot_read_parser = tarot_subparsers.add_parser("read", help="Draw a tarot reading")
