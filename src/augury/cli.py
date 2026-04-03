@@ -28,9 +28,13 @@ from .config import (
     install_cli_launchers,
     install_discord_helper,
     load_integrations,
+    load_preferences,
     load_json as config_load_json,
+    load_system_preferences,
     save_integrations,
+    save_system_preferences,
 )
+from .systems.iching import cli as iching_cli
 
 try:
     from rich import box
@@ -178,6 +182,12 @@ MENU_ITEMS = [
     ("q", "&Quit", None),
 ]
 MENU_HINT = "j/k move  |  enter select  |  hotkeys active"
+SYSTEM_MENU_ITEMS = [
+    ("t", "&Tarot", "tarot"),
+    ("i", "&I Ching", "iching"),
+    ("q", "&Quit", None),
+]
+SYSTEM_MENU_HINT = "j/k move  |  enter select  |  tarot / i ching hotkeys active"
 FILTER_OPTIONS = [
     ("all", "All", None),
     ("major", "Major", "major"),
@@ -477,12 +487,12 @@ def _load_json(path: Path, default: Any) -> Any:
 
 def _load_prefs() -> dict[str, Any]:
     prefs = dict(DEFAULT_PREFS)
-    prefs.update(_load_json(PREFS_PATH, {}))
+    prefs.update(load_system_preferences("tarot"))
     return prefs
 
 
 def _save_prefs(prefs: dict[str, Any]) -> None:
-    _atomic_json_write(PREFS_PATH, prefs)
+    save_system_preferences("tarot", prefs)
 
 
 def _load_custom_spreads() -> list[dict[str, Any]]:
@@ -1835,6 +1845,108 @@ class AuguryApp:
                 return
 
 
+class SystemChooserApp:
+    def __init__(self) -> None:
+        self.console = Console(highlight=False, force_terminal=True) if HAS_RICH else Console()
+
+    def draw_main_menu(self, selected: int) -> None:
+        from .systems.iching.engine import load_consultations
+
+        tarot_readings = _load_readings()
+        iching_consultations = load_consultations()
+        subtitle = (
+            f"v{VERSION}  ·  tarot {len(tarot_readings)} readings  ·  i ching {len(iching_consultations)} consultations"
+        )
+        _clear_screen(self.console)
+        self.console.print(_banner(self.console, subtitle))
+        self.console.print("")
+        if HAS_RICH:
+            stats = Table.grid(padding=(0, 3))
+            stats.add_column(style=AMBER_SOFT)
+            stats.add_column(style=STONE)
+            stats.add_row("Tarot Deck", str(len(_get_all_cards())))
+            stats.add_row("I Ching Text", "64 hexagrams")
+            stats.add_row("Launch", "choose a system below")
+            self.console.print(
+                Align.center(
+                    Panel(
+                        stats,
+                        title="Systems",
+                        border_style=AMBER,
+                        box=box.ASCII,
+                        padding=(0, 2),
+                        expand=False,
+                    )
+                )
+            )
+            self.console.print("")
+        label_width = max(len(item[1].replace("&", "")) for item in SYSTEM_MENU_ITEMS)
+        for index, (_hotkey, label, _action) in enumerate(SYSTEM_MENU_ITEMS):
+            styled, plain = _menu_label(label, index == selected)
+            padding = " " * (label_width - len(plain))
+            if index == selected:
+                markup = f"[bold {AMBER}]>===<[/]  {styled}{padding}"
+                raw = f">===<  {plain}{padding}"
+            else:
+                markup = f"[{AMBER_DIM}].....[/]  {styled}{padding}"
+                raw = f".....  {plain}{padding}"
+            self.console.print(_centered(self.console, markup, raw))
+        self.console.print("")
+        self.console.print(_centered(self.console, f"[dim]{SYSTEM_MENU_HINT}[/dim]", SYSTEM_MENU_HINT))
+
+    def _launch(self, action: str | None) -> int:
+        if action == "tarot":
+            AuguryApp().run()
+            return 0
+        if action == "iching":
+            from .systems.iching.app import IChingApp
+
+            IChingApp().run()
+            return 0
+        return 0
+
+    def run(self) -> int:
+        if not sys.stdin.isatty():
+            return self.run_fallback_menu()
+        selected = 0
+        while True:
+            self.draw_main_menu(selected)
+            key = _read_key()
+            if key in ("UP", "k"):
+                selected = (selected - 1) % len(SYSTEM_MENU_ITEMS)
+                continue
+            if key in ("DOWN", "j"):
+                selected = (selected + 1) % len(SYSTEM_MENU_ITEMS)
+                continue
+            if key in ("\r", "\n", " "):
+                action = SYSTEM_MENU_ITEMS[selected][2]
+                if action is None:
+                    return 0
+                self._launch(action)
+                continue
+            if key in ("CTRL_C", "CTRL_D"):
+                return 0
+            for index, (hotkey, _label, action) in enumerate(SYSTEM_MENU_ITEMS):
+                if key.lower() != hotkey:
+                    continue
+                selected = index
+                if action is None:
+                    return 0
+                self._launch(action)
+                break
+
+    def run_fallback_menu(self) -> int:
+        mapping = {item[0]: item[2] for item in SYSTEM_MENU_ITEMS}
+        while True:
+            self.draw_main_menu(0)
+            self.console.print("")
+            choice = self.console.input("choice [t/i/q] ").strip().lower()
+            action = mapping.get(choice)
+            if action is None:
+                return 0
+            self._launch(action)
+
+
 def _emit_json(payload: Any) -> int:
     json.dump(payload, sys.stdout, indent=2, ensure_ascii=True)
     sys.stdout.write("\n")
@@ -1895,6 +2007,7 @@ def _paths_payload() -> dict[str, str]:
         "prefs_path": str(PREFS_PATH),
         "spreads_path": str(SPREADS_PATH),
         "readings_path": str(READINGS_PATH),
+        "iching_readings_path": str(APP_PATHS.iching_readings_path),
         "integrations_path": str(INTEGRATIONS_PATH),
         "launcher_dir": str(default_launcher_dir()),
     }
@@ -1903,7 +2016,7 @@ def _paths_payload() -> dict[str, str]:
 def _configuration_payload() -> dict[str, Any]:
     return {
         "paths": _paths_payload(),
-        "preferences": _load_prefs(),
+        "preferences": load_preferences(),
         "integrations": load_integrations(),
     }
 
@@ -1993,6 +2106,7 @@ def _run_configure_command(args: argparse.Namespace) -> int:
         save_integrations(integrations)
         console.print(f"Installed augury at {launchers['augury']}")
         console.print(f"Installed augury-discord at {launchers['augury-discord']}")
+        console.print(f"Installed iching at {launchers['iching']}")
     else:
         integrations.setdefault("discord", {})
         integrations["discord"].setdefault("enabled", False)
@@ -2067,7 +2181,7 @@ def _run_history_command(args: argparse.Namespace) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="augury",
-        description="Augury tarot reader TUI and CLI.",
+        description="Augury divination suite with tarot and I Ching interfaces.",
     )
     subparsers = parser.add_subparsers(dest="command")
 
@@ -2094,7 +2208,7 @@ def _build_parser() -> argparse.ArgumentParser:
     configure_parser = subparsers.add_parser("configure", help="Run setup and optional integration install")
     configure_parser.add_argument("--json", action="store_true", help="Emit machine-readable configuration")
     configure_parser.add_argument("--print-paths", action="store_true", help="Print active config and data paths")
-    configure_parser.add_argument("--install-launchers", action="store_true", help="Install augury and augury-discord into a stable bin directory")
+    configure_parser.add_argument("--install-launchers", action="store_true", help="Install augury, augury-discord, and iching into a stable bin directory")
     configure_parser.add_argument("--launcher-dir", default=None, help="Override the launcher install directory")
     configure_parser.add_argument("--install-discord-helper", action="store_true", help="Install the Discord helper launcher")
     configure_parser.add_argument("--discord-helper-path", default=None, help="Override the helper launcher path")
@@ -2102,6 +2216,31 @@ def _build_parser() -> argparse.ArgumentParser:
 
     paths_parser = subparsers.add_parser("paths", help="Show Augury config and data paths")
     paths_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    tarot_parser = subparsers.add_parser("tarot", help="Launch the tarot app or run tarot commands")
+    tarot_subparsers = tarot_parser.add_subparsers(dest="tarot_command")
+
+    tarot_read_parser = tarot_subparsers.add_parser("read", help="Draw a tarot reading")
+    tarot_read_parser.add_argument("--spread", default=None, help="Spread name or slug")
+    tarot_read_parser.add_argument("--query", default=None, help="Question or reading prompt")
+    tarot_read_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+    tarot_read_parser.add_argument("--interpret", action="store_true", help="LLM narrative mode stub")
+    tarot_read_parser.add_argument("--no-save", action="store_true", help="Do not persist the reading to history")
+
+    tarot_daily_parser = tarot_subparsers.add_parser("daily", help="Draw the daily card")
+    tarot_daily_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+    tarot_daily_parser.add_argument("--interpret", action="store_true", help="LLM narrative mode stub")
+    tarot_daily_parser.add_argument("--no-save", action="store_true", help="Do not persist the reading to history")
+
+    tarot_card_parser = tarot_subparsers.add_parser("card", help="Show a tarot card")
+    tarot_card_parser.add_argument("name", nargs="+", help="Card name")
+    tarot_card_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+
+    tarot_history_parser = tarot_subparsers.add_parser("history", help="Show tarot reading history")
+    tarot_history_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
+    tarot_history_parser.add_argument("--limit", type=int, default=25, help="Number of readings to show")
+
+    iching_cli.add_augury_subparser(subparsers)
     return parser
 
 
@@ -2122,8 +2261,19 @@ def main(argv: list[str] | None = None) -> int:
         return _run_configure_command(args)
     if args.command == "paths":
         return _run_paths_command(args)
-    app = AuguryApp()
-    return app.run()
+    if args.command == "tarot":
+        if args.tarot_command == "read":
+            return _run_read_command(args)
+        if args.tarot_command == "daily":
+            return _run_daily_command(args)
+        if args.tarot_command == "card":
+            return _run_card_command(args)
+        if args.tarot_command == "history":
+            return _run_history_command(args)
+        return AuguryApp().run()
+    if args.command == "iching":
+        return iching_cli.run_augury_args(args)
+    return SystemChooserApp().run()
 
 
 if __name__ == "__main__":

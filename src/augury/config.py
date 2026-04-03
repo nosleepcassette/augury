@@ -11,6 +11,23 @@ from typing import Any
 
 APP_NAME = "augury"
 SYSTEM_BIN_DIR = Path("/usr/local/bin")
+DEFAULT_TAROT_PREFS = {
+    "default_spread": "three-card",
+    "allow_reversals": True,
+    "show_tips": True,
+    "history_limit": 50,
+}
+DEFAULT_ICHING_PREFS = {
+    "default_method": "three-coin-yarrow",
+    "show_trigrams": True,
+    "show_line_text": True,
+    "history_limit": 50,
+    "daily_mode": "deterministic",
+}
+DEFAULT_APP_PREFS = {
+    "tarot": DEFAULT_TAROT_PREFS,
+    "iching": DEFAULT_ICHING_PREFS,
+}
 DEFAULT_INTEGRATIONS = {
     "discord": {
         "enabled": False,
@@ -26,6 +43,7 @@ class AppPaths:
     prefs_path: Path
     spreads_path: Path
     readings_path: Path
+    iching_readings_path: Path
     integrations_path: Path
 
 
@@ -87,6 +105,7 @@ def get_app_paths() -> AppPaths:
         prefs_path=config_dir / "prefs.json",
         spreads_path=config_dir / "spreads.json",
         readings_path=data_dir / "readings.jsonl",
+        iching_readings_path=data_dir / "iching_readings.jsonl",
         integrations_path=config_dir / "integrations.json",
     )
 
@@ -159,6 +178,7 @@ def install_cli_launchers(bin_dir: str | Path | None = None) -> dict[str, Path]:
     return {
         "augury": install_cli_launcher("augury", "augury", bin_dir),
         "augury-discord": install_cli_launcher("augury-discord", "augury.discord", bin_dir),
+        "iching": install_cli_launcher("iching", "augury.iching", bin_dir),
     }
 
 
@@ -171,3 +191,46 @@ def install_discord_helper(destination: str | Path | None = None) -> Path:
     if os.name != "nt":
         target.chmod(0o755)
     return target
+
+
+def _merge_defaults(base: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    merged = json.loads(json.dumps(base))
+    for key, value in payload.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key].update(value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def load_preferences() -> dict[str, Any]:
+    payload = load_json(get_app_paths().prefs_path, {})
+    if not isinstance(payload, dict):
+        payload = {}
+
+    if "tarot" not in payload and "iching" not in payload:
+        legacy_tarot = {
+            key: payload.get(key, value)
+            for key, value in DEFAULT_TAROT_PREFS.items()
+        }
+        payload = {"tarot": legacy_tarot}
+
+    return _merge_defaults(DEFAULT_APP_PREFS, payload)
+
+
+def save_preferences(config: dict[str, Any]) -> None:
+    atomic_json_write(get_app_paths().prefs_path, _merge_defaults(DEFAULT_APP_PREFS, config))
+
+
+def load_system_preferences(system: str) -> dict[str, Any]:
+    prefs = load_preferences()
+    section = prefs.get(system, {})
+    if not isinstance(section, dict):
+        return {}
+    return dict(section)
+
+
+def save_system_preferences(system: str, payload: dict[str, Any]) -> None:
+    prefs = load_preferences()
+    prefs[system] = dict(payload)
+    save_preferences(prefs)

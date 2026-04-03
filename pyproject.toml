@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "augury"
-version = "0.2.1"
-description = "Terminal tarot reader with a TUI, CLI, and optional Discord formatter."
+version = "0.3.0"
+description = "Terminal divination suite with tarot, I Ching, a TUI, CLI, and optional Discord formatter."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
@@ -15,7 +15,7 @@ authors = [
 dependencies = [
   "rich>=13.7",
 ]
-keywords = ["tarot", "cli", "tui", "discord"]
+keywords = ["tarot", "i-ching", "cli", "tui", "discord"]
 classifiers = [
   "Development Status :: 4 - Beta",
   "Environment :: Console",
@@ -40,9 +40,13 @@ dev = ["pytest>=8.0"]
 [project.scripts]
 augury = "augury.cli:main"
 augury-discord = "augury.discord:main"
+iching = "augury.iching:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"augury.systems.iching" = ["data/*.js"]

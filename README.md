@@ -1,14 +1,17 @@
 # Augury
 
-Augury is a terminal tarot reader with a keyboard-driven TUI, a scriptable CLI, and an optional Discord formatter/helper. It is designed to expose stable `augury` and `augury-discord` commands on `PATH`, even on systems where `pip` drops console scripts into a version-specific directory.
+Augury is a terminal divination suite with a keyboard-driven TUI, a scriptable CLI, and an optional Discord formatter/helper. It currently ships with a tarot system and a full-text I Ching system, and it is designed to expose stable `augury`, `augury-discord`, and `iching` commands on `PATH`, even on systems where `pip` drops console scripts into a version-specific directory.
 
 Created by **cassette, aka maps**  
 Homepage: <https://cassette.help>
 
 ## Features
 
-- Full-screen terminal UI for browsing cards, drawing readings, managing custom spreads, and reviewing history
-- CLI commands for `read`, `daily`, `card`, `history`, `configure`, and `paths`
+- System chooser in `augury` for tarot and I Ching
+- Full-screen tarot UI for browsing cards, drawing readings, managing custom spreads, and reviewing history
+- Full-screen I Ching UI for casting consultations, browsing all 64 hexagrams, and reviewing consultation history
+- CLI commands for tarot via `augury read`, `augury daily`, `augury card`, and namespaced tarot commands via `augury tarot ...`
+- Full I Ching CLI via `augury iching ...` and standalone `iching ...`
 - JSON output for automation and scripting
 - Optional Discord-friendly formatter via `augury-discord`
 - Local preferences, custom spreads, and reading history stored in standard user config/data directories
@@ -37,6 +40,7 @@ Once installed, the package provides:
 
 - `augury`
 - `augury-discord`
+- `iching`
 
 The launcher install step above writes small wrapper scripts that execute `python -m augury` and
 `python -m augury.discord` with the interpreter Augury was installed under. That keeps the binary
@@ -50,6 +54,12 @@ Launch the TUI:
 augury
 ```
 
+Launch the standalone I Ching app:
+
+```bash
+iching
+```
+
 Draw a reading from the CLI:
 
 ```bash
@@ -60,6 +70,18 @@ Emit machine-readable JSON without writing to history:
 
 ```bash
 augury read --json --no-save --spread single --query "release check"
+```
+
+Cast an I Ching consultation:
+
+```bash
+augury iching cast --query "What is shifting?"
+```
+
+Run the deterministic daily hexagram from the standalone CLI:
+
+```bash
+iching daily --date 2026-04-03
 ```
 
 Inspect paths:
@@ -87,7 +109,8 @@ augury-discord read --spread celtic-cross --query "What is the larger pattern?"
 ```
 
 The `configure` flow can install stable `augury` and `augury-discord` launchers into a shared bin
-directory. It still supports an explicit `augury-discord` helper path when you need one.
+directory, and now installs `iching` alongside them. It still supports an explicit
+`augury-discord` helper path when you need one.
 
 ## Storage
 
@@ -103,6 +126,8 @@ You can override these with:
 - `AUGURY_CONFIG_DIR`
 - `AUGURY_DATA_DIR`
 - `AUGURY_BIN_DIR`
+
+Tarot history is stored in `readings.jsonl`; I Ching consultations are stored in `iching_readings.jsonl`.
 
 ## Development
 

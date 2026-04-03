@@ -27,10 +27,14 @@ def test_install_cli_launchers_writes_wrappers(tmp_path: Path) -> None:
     launchers = config_module.install_cli_launchers(tmp_path)
     augury_path = launchers["augury"]
     discord_path = launchers["augury-discord"]
+    iching_path = launchers["iching"]
 
     assert augury_path == tmp_path / "augury"
     assert discord_path == tmp_path / "augury-discord"
+    assert iching_path == tmp_path / "iching"
     assert augury_path.exists()
     assert discord_path.exists()
+    assert iching_path.exists()
     assert '-m augury "$@"' in augury_path.read_text(encoding="utf-8")
     assert '-m augury.discord "$@"' in discord_path.read_text(encoding="utf-8")
+    assert '-m augury.iching "$@"' in iching_path.read_text(encoding="utf-8")
