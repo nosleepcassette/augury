@@ -531,6 +531,7 @@ def _card_payload(card: Any) -> dict[str, Any]:
         "reversed_meaning": _card_meaning(card, True),
         "educational_tip": _ensure_sentence(_first_present(card, "educational_tip", "tip", default="")),
         "related_cards": _listify(_first_present(card, "related_cards", "related", default=[])),
+        "art": _first_present(card, "art", default=""),
     }
 
 
@@ -695,6 +696,9 @@ def _fallback_art(card_data: dict[str, Any]) -> str:
 
 
 def _render_card_art(card_data: dict[str, Any]) -> str:
+    existing = str(card_data.get("art") or "").strip()
+    if existing:
+        return existing
     if _AUGURY_ART is not None:
         try:
             if card_data.get("arcana") == "major":

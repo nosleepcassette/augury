@@ -36,3 +36,5 @@ That installs `augury` and `augury-discord` into `/usr/local/bin` by default, or
 - Interpretations are template-based.
 - No external API calls are needed.
 - Reading history is stored under the Augury user data directory reported by `augury paths`.
+- When showing a reading, include each card's ASCII art with the interpretation instead of only naming the card.
+- Reading payloads and saved history include the card art, so preserve it when quoting or logging a draw.

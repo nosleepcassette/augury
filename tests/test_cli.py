@@ -70,6 +70,30 @@ def test_read_json_save_writes_history(tmp_path: Path) -> None:
     payload = json.loads(result.stdout)
     assert payload["saved"] is True
     assert (tmp_path / "readings.jsonl").exists()
+    assert payload["drawn_cards"][0]["art"].strip()
+    assert payload["drawn_cards"][0]["card"]["art"].strip()
+
+
+def test_history_json_preserves_card_art(tmp_path: Path) -> None:
+    _run(
+        "read",
+        "--json",
+        "--spread",
+        "single",
+        "--query",
+        "keep the art",
+        env={"AUGURY_HOME": str(tmp_path)},
+    )
+    result = _run(
+        "history",
+        "--json",
+        "--limit",
+        "1",
+        env={"AUGURY_HOME": str(tmp_path)},
+    )
+    payload = json.loads(result.stdout)
+    assert payload[0]["drawn_cards"][0]["art"].strip()
+    assert payload[0]["drawn_cards"][0]["card"]["art"].strip()
 
 
 def test_paths_command_reports_override(tmp_path: Path) -> None:
@@ -125,3 +149,18 @@ def test_discord_command_formats_card(tmp_path: Path) -> None:
     result = _run_discord("handle", "/tarot card The Fool", env={"AUGURY_HOME": str(tmp_path)})
     assert "**The Fool**" in result.stdout
     assert "Upright:" in result.stdout
+    assert "```" in result.stdout
+
+
+def test_discord_read_includes_card_art(tmp_path: Path) -> None:
+    result = _run_discord(
+        "read",
+        "--spread",
+        "single",
+        "--query",
+        "show the card",
+        env={"AUGURY_HOME": str(tmp_path)},
+    )
+    assert "**Single Card**" in result.stdout
+    assert "```" in result.stdout
+    assert "Keywords:" in result.stdout

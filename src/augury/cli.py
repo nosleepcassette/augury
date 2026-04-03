@@ -805,6 +805,19 @@ def _fallback_tips(reading: Any) -> list[str]:
 
 
 def _fallback_reading_to_json(reading: Any) -> dict[str, Any]:
+    def _fallback_card_payload(card: Any) -> dict[str, Any]:
+        payload = _json_safe(card)
+        if isinstance(payload, dict):
+            payload["art"] = _card_art(card)
+            return payload
+        return {
+            "name": _card_name(card),
+            "number": _card_number(card),
+            "suit": _card_suit(card),
+            "arcana": _card_arcana(card),
+            "art": _card_art(card),
+        }
+
     return {
         "spread_name": reading.spread_name,
         "query": reading.query,
@@ -818,9 +831,10 @@ def _fallback_reading_to_json(reading: Any) -> dict[str, Any]:
                 "element": _card_element(drawn.card),
                 "position_name": drawn.position_name,
                 "reversed": drawn.reversed,
+                "art": _card_art(drawn.card),
                 "keywords": _card_keywords(drawn.card, drawn.reversed),
                 "meaning": _card_meaning(drawn.card, drawn.reversed),
-                "card": _json_safe(drawn.card),
+                "card": _fallback_card_payload(drawn.card),
             }
             for drawn in reading.drawn_cards
         ],
@@ -918,6 +932,9 @@ def _load_readings() -> list[Any]:
 
 
 def _card_art(card: Any) -> str:
+    existing = _first_present(card, "art", default=None)
+    if isinstance(existing, str) and existing.strip():
+        return existing
     name = _card_name(card)
     suit = _card_suit(card)
     number = _card_number(card)

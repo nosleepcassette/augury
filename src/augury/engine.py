@@ -11,6 +11,7 @@ from pathlib import Path
 from random import SystemRandom
 from typing import Any
 
+from . import art as art_module
 from .config import get_app_paths
 
 _RNG = SystemRandom()
@@ -446,7 +447,26 @@ def _serialize_card(card: Any) -> dict[str, Any]:
     serialized.setdefault("reversed_keywords", _card_keywords(card, True))
     serialized.setdefault("upright_meaning", _card_meaning(card, False))
     serialized.setdefault("reversed_meaning", _card_meaning(card, True))
+    serialized.setdefault("art", _card_art(card))
     return serialized
+
+
+def _card_art(card: Any) -> str:
+    existing = _first_present(card, "art", default=None)
+    if isinstance(existing, str) and existing.strip():
+        return existing
+
+    name = _card_name(card)
+    suit = _card_suit(card)
+    number = _card_number(card)
+    try:
+        if _card_arcana(card) == "major":
+            return art_module.get_card_art(name)
+        if suit and number:
+            return art_module.get_suit_art(suit, number)
+    except Exception:
+        pass
+    return str(art_module.CARD_BACK)
 
 
 def _load_augury_cards_module() -> Any:
@@ -775,6 +795,7 @@ def reading_to_json(reading: Reading) -> dict[str, Any]:
                 "element": _card_element(drawn.card),
                 "position_name": drawn.position_name,
                 "reversed": drawn.reversed,
+                "art": _card_art(drawn.card),
                 "keywords": _card_keywords(drawn.card, drawn.reversed),
                 "meaning": _card_meaning(drawn.card, drawn.reversed),
                 "card": _serialize_card(drawn.card),
