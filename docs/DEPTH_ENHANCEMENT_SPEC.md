@@ -36,37 +36,37 @@ Each reading generates interpretation through 5 layers:
 # New data structures
 @dataclass
 class InterpretationLayer:
-    layer: str        # primary|secondary|tertiary|cognitive|integration
-    interpretation: str
-    confidence: float
+ layer: str # primary|secondary|tertiary|cognitive|integration
+ interpretation: str
+ confidence: float
 
-@dataclass  
+@dataclass 
 class ElementalAnalysis:
-    fire: List[DrawnCard]
-    water: List[DrawnCard]
-    air: List[DrawnCard]
-    earth: List[DrawnCard]
-    dominant: str
-    interpretation: str
+ fire: List[DrawnCard]
+ water: List[DrawnCard]
+ air: List[DrawnCard]
+ earth: List[DrawnCard]
+ dominant: str
+ interpretation: str
 
 # Core function (add to engine.py)
 def generate_premium_interpretation(reading):
-    return {
-        'primary': _interpret_positions(reading),
-        'secondary': _interpret_elements(reading),
-        'tertiary': _interpret_relationships(reading),
-        'cognitive': _interpret_confidence(reading),
-        'integration': _interpret_overall(reading)
-    }
+ return {
+ 'primary': _interpret_positions(reading),
+ 'secondary': _interpret_elements(reading),
+ 'tertiary': _interpret_relationships(reading),
+ 'cognitive': _interpret_confidence(reading),
+ 'integration': _interpret_overall(reading)
+ }
 
 # Card combinations - HIGH PRIORITY
 def _interpret_relationships(reading):
-    "When cards appear together, actually analyze them"
-    for card1, card2 in adjacent_pairs(reading):
-        if same_element(card1, card2):
-            return f"{card1.element}+ {card2.element} = harmony strengthens"
-        if opposing_elements(card1, card2):
-            return f"{card1.element} vs {card2.element} = creates tension"
+ "When cards appear together, actually analyze them"
+ for card1, card2 in adjacent_pairs(reading):
+ if same_element(card1, card2):
+ return f"{card1.element}+ {card2.element} = harmony strengthens"
+ if opposing_elements(card1, card2):
+ return f"{card1.element} vs {card2.element} = creates tension"
 ```
 
 ---
@@ -147,7 +147,7 @@ Confidence: 78%
 - Add element analysis
 - Card combination detection
 
-**Phase 2 (Weeks 4-6): Quality**  
+**Phase 2 (Weeks 4-6): Quality** 
 - Add confidence scoring
 - Add integration layer
 - Build overall narrative
@@ -168,19 +168,19 @@ Confidence: 78%
 
 ```sql
 CREATE TABLE reading_layers (
-    id UUID PRIMARY KEY,
-    reading_id UUID REFERENCES readings(id),
-    layer_type TEXT, -- primary|secondary|tertiary|cognitive|integration
-    interpretation TEXT NOT NULL,
-    confidence DECIMAL(3,2)
+ id UUID PRIMARY KEY,
+ reading_id UUID REFERENCES readings(id),
+ layer_type TEXT, -- primary|secondary|tertiary|cognitive|integration
+ interpretation TEXT NOT NULL,
+ confidence DECIMAL(3,2)
 );
 
 CREATE TABLE card_combinations (
-    id UUID PRIMARY KEY,
-    reading_id UUID,
-    cards TEXT[], -- ["fool", "magician"]
-    relationship_type TEXT,
-    interpretation TEXT
+ id UUID PRIMARY KEY,
+ reading_id UUID,
+ cards TEXT[], -- ["fool", "magician"]
+ relationship_type TEXT,
+ interpretation TEXT
 );
 ```
 
@@ -208,5 +208,31 @@ CREATE TABLE card_combinations (
 
 ---
 
-*Clean spec successfully written to disk*
-*Location: ~/dev/augury/docs/DEPTH_ENHANCEMENT_SPEC.md*
+## I Ching Integration Spec
+
+**Goal:** Add full I Ching application as first-class sibling to tarot.
+
+**Key Features:**
+- Native inside Augury CLI/TUI
+- Standalone `iching` launcher
+- Three-coin casting method with yarrow-stalk probabilities
+- Daily hexagrams by calendar date
+- Command pattern: `augury iching cast --method coins --query "..."`
+
+---
+
+## Astrology Integration Spec
+
+**Goal:** Integrate Astrolog bridge into Augury
+
+**Two Modes:**
+1. Wrapper mode: `augury astro natal`, `augury astro transits`
+2. Reading-enrichment: `augury read --with-astrology` (adds context without replacing tarot)
+
+**Shared Backend:**
+- Uses existing Hermes Astrolog bridge at `/Users/maps/dev/astrolog/astrolog`
+- Shared natal profile: `~/.hermes/astrolog/profile.json`
+
+---
+
+*Clean spec successfully written - this time to correct location in augury repo*
