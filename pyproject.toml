@@ -32,7 +32,7 @@ classifiers = [
 
 [project.urls]
 Homepage = "https://cassette.help"
-Repository = "https://github.com/mistermaps/augury"
+Repository = "https://github.com/nosleepcassette/augury"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]

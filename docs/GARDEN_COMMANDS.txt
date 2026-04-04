@@ -1,0 +1,26 @@
+# Garden Commands To Execute
+# Location: ~/dev/augury/docs/GARDEN_COMMANDS.txt
+# Run these commands to push to garden:
+
+# Polycule - Working Demo
+/Users/maps/dev/gardener/bin/garden remember "Polycule working demo confirmed: Claude built full chat room, Wizard responded"
+
+# Augury - Depth Spec
+/Users/maps/dev/gardener/bin/garden remember "Augury depth spec: created 5-layer interpretation model. spec at ~/dev/augury/docs/DEPTH_ENHANCEMENT_SPEC.md"
+
+# Session Summary
+/Users/maps/dev/gardener/bin/garden sing "Session completed: Polycule working, Augury depth spec ready. Files documented."
+
+# Core Files
+/Users/maps/dev/gardener/bin/garden remember "Documents: Polycule handover at ~/dev/polycule/HANDOVER-v2.md (643 lines)"
+/Users/maps/dev/gardener/bin/garden remember "Documents: Augury depth spec at ~/dev/augury/docs/DEPTH_ENHANCEMENT_SPEC.md (212 lines)"
+
+# Next Steps
+/Users/maps/dev/gardener/bin/garden remember "Next: Polycule needs UI adapters for Claude/Codex/Hermes/Maps"
+/Users/maps/dev/gardener/bin/garden remember "Next: Augury needs depth implementation by capable agent"
+
+# Confirmation
+/Users/maps/dev/gardener/bin/garden recall "Polycule working demo"
+/Users/maps/dev/gardener/bin/garden recall "Augury depth"
+
+# Run these with: bash ~/dev/augury/docs/GARDEN_COMMANDS.txt

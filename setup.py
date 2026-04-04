@@ -15,10 +15,10 @@ setup(
     long_description=README,
     long_description_content_type="text/markdown",
     author="cassette, aka maps",
-    url="https://github.com/mistermaps/augury",
+    url="https://github.com/nosleepcassette/augury",
     project_urls={
         "Homepage": "https://cassette.help",
-        "Repository": "https://github.com/mistermaps/augury",
+        "Repository": "https://github.com/nosleepcassette/augury",
     },
     license="MIT",
     python_requires=">=3.10",
