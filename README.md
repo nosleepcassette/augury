@@ -19,9 +19,8 @@ Homepage: <https://cassette.help>
                    "Y88P"                    "Y88P"
 ```
 
-## https://github.com/user-attachments/assets/0656b052-d7cc-4f9f-9847-e03c42bc5462
-Augury
-
+## Augury
+https://github.com/user-attachments/assets/0656b052-d7cc-4f9f-9847-e03c42bc5462
 Augury is the suite-level shell that ties the whole project together. Running `augury` opens the top-level chooser, shows you the current tarot and I Ching history counts, and lets you jump into tarot, I Ching, or a combined reading from one place. The suite-level commands also live here: `augury combined` for one-query-two-systems work, `augury render` for turning markdown readings into shareable PNG/PDF assets, and `augury configure` / `augury paths` for install and storage management.
 
 In practice, this is the part of the app that makes the whole thing feel coherent instead of like three unrelated scripts. It owns the stable launcher setup, the shared config/data locations, the combined reading flow, and the cross-system ergonomics that keep tarot, I Ching, and rendering under one roof.
