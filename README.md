@@ -24,6 +24,8 @@ Homepage: <https://cassette.help>
 
 https://github.com/user-attachments/assets/418102d5-1278-45f3-bc73-e12bf9fa9b72
 
+<img width="945" height="796" alt="augury1" src="https://github.com/user-attachments/assets/0e1d8e6c-fa8f-4033-9d1c-7a54c17da7b8" />
+
 
 Augury is the suite-level shell that ties the whole project together. Running `augury` opens the top-level chooser, shows you the current tarot and I Ching history counts, and lets you jump into tarot, I Ching, or a combined reading from one place. The suite-level commands also live here: `augury combined` for one-query-two-systems work, `augury render` for turning markdown readings into shareable PNG/PDF assets, and `augury configure` / `augury paths` for install and storage management.
 
@@ -41,6 +43,11 @@ SSSSS S  SS SSSSS S  SS SSSSS S  SS SSSS' S  SS SSSSS SSSSS S  SS SSSSS
       S%%%S       S%%%S SSSSS S%%%S SSSSS S%%%S SSSSS       S%%%S
       SSSSS       SSSSS SSSSS SSSSS SSSSS SSSSSsSSSSS       SSSSS
 ```
+<img width="945" height="796" alt="augury2" src="https://github.com/user-attachments/assets/45eba7fa-f55f-44b9-8472-616f8445e0cd" />
+<img width="1065" height="1136" alt="augury3" src="https://github.com/user-attachments/assets/c1febff1-f33b-4e43-811f-308db7dd28c4" />
+<img width="1065" height="1136" alt="augury5" src="https://github.com/user-attachments/assets/388c0f48-ff9c-40cd-acca-5301fba99671" />
+<img width="1065" height="1136" alt="augury5" src="https://github.com/user-attachments/assets/567db2d0-f4c1-453b-aa90-53b88f6c442c" />
+<img width="1065" height="1136" alt="augury4" src="https://github.com/user-attachments/assets/3abbd8f2-fde0-47a9-902f-9aadcd54b8df" />
 
 The tarot side is the card-driven reading app. In the TUI it gives you a spread picker, a card browser with suit/arcana filtering and search, reading history, custom spread management, and tarot-specific preferences like reversals, tips, and history length. In the detail views it drills into correspondences, keywords, meanings, related cards, and study notes, so it works as both a reading tool and a study surface.
 
@@ -59,6 +66,10 @@ o888o      `Y8bod8P' o888o o888o o888o o888o o888o `8oooooo.
                                                    d"     YD
                                                    "Y88888P'
 ```
+<img width="1065" height="1136" alt="augury5" src="https://github.com/user-attachments/assets/0d9a2d9f-5952-4fae-8110-8a8fe8369c05" />
+<img width="1072" height="1167" alt="augury6" src="https://github.com/user-attachments/assets/e0525a1e-c8e6-4eda-bfcd-b2bc793847df" />
+
+
 
 The I Ching side is the full-text consultation app. In the TUI it handles new casts, deterministic daily hexagrams, browsing all 64 hexagrams, consultation history, and preference controls for things like trigram display and line text visibility. The detail screens bring together the line structure, primary and relating hexagrams, Wilhelm/Baynes judgment and image text, and changing-line commentary in one place.
 
