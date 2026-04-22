@@ -1,3 +1,6 @@
+
+
+
 # Augury
 
 Augury is a terminal divination suite with a keyboard-driven TUI, a scriptable CLI, and an optional Discord formatter/helper. It currently ships with a tarot system and a full-text I Ching system, and it is designed to expose stable `augury`, `augury-discord`, and `iching` commands on `PATH`, even on systems where `pip` drops console scripts into a version-specific directory.
@@ -16,7 +19,8 @@ Homepage: <https://cassette.help>
                    "Y88P"                    "Y88P"
 ```
 
-## Augury
+## https://github.com/user-attachments/assets/0656b052-d7cc-4f9f-9847-e03c42bc5462
+Augury
 
 Augury is the suite-level shell that ties the whole project together. Running `augury` opens the top-level chooser, shows you the current tarot and I Ching history counts, and lets you jump into tarot, I Ching, or a combined reading from one place. The suite-level commands also live here: `augury combined` for one-query-two-systems work, `augury render` for turning markdown readings into shareable PNG/PDF assets, and `augury configure` / `augury paths` for install and storage management.
 
