@@ -88,6 +88,28 @@ _NUMBER_MEANINGS = {
     21: "completion, wholeness, and synthesis",
 }
 
+_TRIGRAM_MEANINGS: dict[str, str] = {
+    "Heaven": "the Creative — pure yang, strength, the father principle",
+    "Earth": "the Receptive — pure yin, yielding, the mother principle",
+    "Thunder": "the Arousing — shock and movement, the eldest son",
+    "Water": "the Abysmal — danger and depth, the middle son",
+    "Mountain": "Keeping Still — rest and restraint, the youngest son",
+    "Wind": "the Gentle — penetrating and persistent, the eldest daughter",
+    "Fire": "the Clinging — clarity and illumination, the middle daughter",
+    "Lake": "the Joyous — openness and expression, the youngest daughter",
+}
+
+_ELEMENT_PAIRS: dict[tuple[str, str], str] = {
+    ("fire", "water"): "Fire and Water in the same spread create a tension between action and emotion — the drive to move forward meets the pull to feel first.",
+    ("water", "fire"): "Fire and Water in the same spread create a tension between action and emotion — the drive to move forward meets the pull to feel first.",
+    ("air", "earth"): "Air and Earth together suggest that the thinking and the practical are both in play — ideas seeking ground, or material reality demanding a clearer mental framing.",
+    ("earth", "air"): "Air and Earth together suggest that the thinking and the practical are both in play — ideas seeking ground, or material reality demanding a clearer mental framing.",
+    ("fire", "earth"): "Fire and Earth together are generative — desire and will meeting practical capacity, the energy to build something real.",
+    ("earth", "fire"): "Fire and Earth together are generative — desire and will meeting practical capacity, the energy to build something real.",
+    ("water", "air"): "Water and Air together speak to the interior life — emotion and thought in conversation, feeling trying to find its language.",
+    ("air", "water"): "Water and Air together speak to the interior life — emotion and thought in conversation, feeling trying to find its language.",
+}
+
 _MAJOR_ARCANA_NAMES = {
     "the fool",
     "the magician",
@@ -154,6 +176,30 @@ _BUILTIN_SPREADS = {
         "name": "Elemental",
         "positions": ["Fire (Drive)", "Water (Emotion)", "Air (Mind)", "Earth (Material)"],
     },
+    "horseshoe": {
+        "name": "Horseshoe",
+        "positions": ["Past", "Present", "Hidden Influences", "Obstacles", "External Forces", "Advice", "Outcome"],
+    },
+    "shadow-work": {
+        "name": "Shadow Work",
+        "positions": ["The Pattern", "The Root", "What Is Hidden", "The Gift Within It", "The Path Forward"],
+    },
+    "star": {
+        "name": "Star",
+        "positions": ["Present Situation", "What Crosses You", "What Crowns You", "Foundation", "Recent Past", "Near Future", "Your Role", "External Influences", "Hopes & Fears", "Where This Leads"],
+    },
+    "soul-path": {
+        "name": "Soul Path",
+        "positions": ["Where You Came From", "What You Carry", "Your Core Gift", "Your Challenge", "Your Next Step"],
+    },
+    "new-moon-intention": {
+        "name": "New Moon Intention",
+        "positions": ["What I Am Releasing", "What I Am Calling In", "What Supports This", "The Action Step", "The Blessing"],
+    },
+    "relationship-deep": {
+        "name": "Relationship Deep",
+        "positions": ["Your Energy", "Their Energy", "The Bond", "What Strengthens", "What Challenges", "Hidden Dynamic", "Guidance"],
+    },
 }
 
 _POSITION_CONTEXTS = {
@@ -181,6 +227,36 @@ _POSITION_CONTEXTS = {
     "water-emotion": "This position focuses on the emotional undertow and what the heart is carrying.",
     "air-mind": "This position focuses on thought, perspective, and mental framing.",
     "earth-material": "This position focuses on the concrete, practical, and embodied side of the matter.",
+    "hidden-influences": "This reveals forces at work beneath the surface that are shaping the situation.",
+    "external-forces": "This shows the conditions, people, or energies coming from outside.",
+    "the-pattern": "This identifies the recurring dynamic or behavior that is calling for attention.",
+    "the-root": "This points to the origin or deep cause underneath the pattern.",
+    "what-is-hidden": "This surfaces what has been out of awareness or actively avoided.",
+    "the-gift-within-it": "This reveals what strength, insight, or resource lives inside the difficulty.",
+    "the-path-forward": "This shows the direction of integration and what becomes possible on the other side.",
+    "what-crosses-you": "This names the tension, friction, or opposing force working against the situation.",
+    "what-crowns-you": "This reflects the highest potential or clearest possible outcome in view.",
+    "foundation": "This points to the deeper ground the situation is rooted in.",
+    "recent-past": "This shows what has just concluded or is still in the process of completing.",
+    "near-future": "This indicates what is approaching and beginning to take form.",
+    "your-role": "This names the part you are playing — consciously or not — in how this unfolds.",
+    "where-this-leads": "This suggests the longer arc and where the energy wants to land.",
+    "where-you-came-from": "This points to the formative experience, lineage, or history that shaped the soul's starting point.",
+    "what-you-carry": "This names the gifts, wounds, or patterns brought into this life from the past.",
+    "your-core-gift": "This identifies the essential quality or capacity that is yours to express.",
+    "your-challenge": "This names the difficulty that is also the growing edge — the place where the gift is tested.",
+    "your-next-step": "This shows the most aligned movement forward at this moment in the path.",
+    "what-i-am-releasing": "This names what is ready to be let go — what no longer serves the new cycle.",
+    "what-i-am-calling-in": "This holds the seed of what wants to grow and be invited into being.",
+    "what-supports-this": "This reveals the resource, energy, or ally that backs the intention.",
+    "the-action-step": "This shows the concrete or symbolic move that anchors the intention in the world.",
+    "the-blessing": "This names the grace, opening, or gift that accompanies the new beginning.",
+    "their-energy": "This reflects the other person's current state, stance, or energy in relation to the dynamic.",
+    "the-bond": "This describes the nature, quality, and pattern of the connection itself.",
+    "what-strengthens": "This shows what feeds and sustains the best in this relationship.",
+    "what-challenges": "This names the friction, gap, or growth edge between the two people.",
+    "hidden-dynamic": "This surfaces what is operating beneath the surface in the connection.",
+    "guidance": "This offers the clearest direction for how to move within this relationship.",
 }
 
 
@@ -432,6 +508,46 @@ def _card_related(card: Any) -> list[str]:
     return [item.lower() for item in _listify(_first_present(card, "related_cards", "related", default=None))]
 
 
+def _card_astrology_sentence(card: Any) -> str:
+    astro = _first_present(card, "astrology", default=None)
+    if not astro:
+        return ""
+    return f"Astrologically, this card carries the signature of {astro}, bringing that planetary and sign energy directly into this position."
+
+
+def _card_numerology_sentence(card: Any) -> str:
+    raw = _first_present(card, "numerology", default=None)
+    if not raw:
+        return ""
+    text = str(raw).strip()
+    if " / " in text:
+        num_part, desc = text.split(" / ", 1)
+        num_part = num_part.strip()
+        desc = desc.strip()
+        return f"The number {num_part} here is the numerological signature of this card — the energy of {desc}."
+    return f"Numerologically: {text}."
+
+
+def _card_educational_tip(card: Any) -> str:
+    tip = _first_present(card, "educational_tip", default=None)
+    if not tip:
+        return ""
+    return _ensure_sentence(str(tip).strip())
+
+
+def _related_in_reading_sentence(card: Any, names_in_reading: set[str]) -> str:
+    related = [n for n in _card_related(card) if n in names_in_reading]
+    if not related:
+        return ""
+    related_str = ", ".join(sorted(n.title() for n in related))
+    count = len(related)
+    verb = "appears" if count == 1 else "appear"
+    return (
+        f"{related_str} {verb} elsewhere in this reading — a traditional pairing with "
+        f"{_card_name(card)} that deepens and reinforces what this position is saying."
+    )
+
+
 def _serialize_card(card: Any) -> dict[str, Any]:
     base = _json_safe(card)
     if not isinstance(base, dict):
@@ -661,53 +777,233 @@ def _pattern_sentences(reading: Reading) -> list[str]:
     return sentences
 
 
-def _interpret_drawn_card(drawn: DrawnCard) -> str:
+def _interpret_drawn_card(drawn: DrawnCard, names_in_reading: set[str] | None = None) -> str:
     card = drawn.card
     name = _card_name(card)
     orientation = "reversed" if drawn.reversed else "upright"
+    parts: list[str] = []
+
+    # Position + card + orientation header
+    parts.append(
+        f"In the {drawn.position_name} position, {name} appears {orientation}. "
+        f"{_position_context(drawn.position_name)}"
+    )
+
+    # Primary meaning
     meaning = _card_meaning(card, drawn.reversed)
+    if meaning:
+        parts.append(meaning)
+
+    # Keywords
     keywords = _card_keywords(card, drawn.reversed)
-    keyword_sentence = ""
     if keywords:
-        keyword_sentence = f" Keywords here include {', '.join(keywords[:4])}."
+        parts.append(f"The active keywords here are {', '.join(keywords[:5])}.")
 
-    major_sentence = ""
+    # Astrology ruler
+    astro_s = _card_astrology_sentence(card)
+    if astro_s:
+        parts.append(astro_s)
+
+    # Numerology
+    num_s = _card_numerology_sentence(card)
+    if num_s:
+        parts.append(num_s)
+
+    # Major Arcana elevation
     if _card_arcana(card) == "major":
-        major_sentence = " Because it is Major Arcana, it reads less like background noise and more like a headline."
+        parts.append(
+            "As a Major Arcana card, this is not background texture — it marks a significant theme, "
+            "a turning point, or an archetypal force active in your life right now."
+        )
 
-    return (
-        f"In the {drawn.position_name} position, {_card_name(card)} appears {orientation}. "
-        f"{_position_context(drawn.position_name)} "
-        f"{meaning}{keyword_sentence}{major_sentence}"
-    ).strip()
+    # Educational tip (if distinctive)
+    tip = _card_educational_tip(card)
+    if tip:
+        parts.append(tip)
+
+    # Related cards in reading
+    if names_in_reading:
+        related_s = _related_in_reading_sentence(card, names_in_reading)
+        if related_s:
+            parts.append(related_s)
+
+    return " ".join(parts).strip()
+
+
+def _elemental_tension_sentences(reading: Reading) -> list[str]:
+    """Note elemental pairings between adjacent cards in the spread."""
+    sentences: list[str] = []
+    seen: set[tuple[str, str]] = set()
+    cards = reading.drawn_cards
+    for i in range(len(cards) - 1):
+        el1 = _card_element(cards[i].card)
+        el2 = _card_element(cards[i + 1].card)
+        if el1 and el2 and el1 != el2:
+            pair = tuple(sorted([el1, el2]))
+            if pair not in seen:
+                seen.add(pair)  # type: ignore[arg-type]
+                msg = _ELEMENT_PAIRS.get((el1, el2)) or _ELEMENT_PAIRS.get((el2, el1))
+                if msg:
+                    sentences.append(msg)
+    return sentences
+
+
+def _closing_synthesis(reading: Reading) -> str:
+    """Generate a closing integrative paragraph from the spread patterns."""
+    analysis = analyze_patterns(reading)
+    parts: list[str] = []
+
+    n = len(reading.drawn_cards)
+    reversal_count = analysis["reversal_count"]
+    ratio = analysis["major_minor_ratio"]
+    dominant_element = analysis.get("dominant_element")
+    dominant_suit = analysis.get("dominant_suit")
+
+    # Reversal framing
+    if reversal_count == n:
+        parts.append(
+            "Every card in this reading arrived reversed. The work described here is largely internal — "
+            "pressure building beneath the surface, energy that has not yet found its outward form."
+        )
+    elif reversal_count >= max(2, n // 2):
+        parts.append(
+            f"{reversal_count} of {n} cards arrived reversed, suggesting this situation is processing "
+            "inwardly before it becomes fully visible or actionable."
+        )
+    elif reversal_count == 0 and n >= 3:
+        parts.append(
+            "All cards arrived upright — the energies described here are expressed and accessible, "
+            "not hidden or blocked."
+        )
+
+    # Major arcana weight
+    if ratio["major"] >= 3:
+        parts.append(
+            f"With {ratio['major']} Major Arcana cards present, this reading is touching something larger "
+            "than immediate circumstances — a life theme, a defining moment, or an archetypal pattern "
+            "that wants your full attention."
+        )
+    elif ratio["major"] == 0 and n >= 4:
+        parts.append(
+            "The absence of Major Arcana means this reading is squarely in the practical, everyday register — "
+            "the situation is workable and the resolution lies in concrete action and choice."
+        )
+
+    # Dominant element close
+    if dominant_element:
+        element_closes = {
+            "fire": "Trust what you want. The energy here is real and the forward movement is available.",
+            "water": "Let yourself feel what you actually feel. The insight this reading points to lives in the emotional body, not in thinking it through.",
+            "air": "Clarity is possible, but it requires cutting through rather than circling. The answer you seek is a decision.",
+            "earth": "This is about what you actually do, not what you intend. The practical path is the spiritual path here.",
+        }
+        close = element_closes.get(dominant_element)
+        if close:
+            parts.append(close)
+
+    return " ".join(parts).strip()
 
 
 def interpret_reading(reading: Reading) -> str:
     sections: list[str] = []
+    names_in_reading = {_card_name(drawn.card).lower() for drawn in reading.drawn_cards}
 
+    # Opening
     if reading.query:
         sections.append(
-            f'You asked about "{reading.query}". The {reading.spread_name} spread frames that question through {len(reading.drawn_cards)} position'
-            + ("s." if len(reading.drawn_cards) != 1 else ".")
+            f'You asked: "{reading.query}". '
+            f"The {reading.spread_name} spread — {len(reading.drawn_cards)} position"
+            + ("s" if len(reading.drawn_cards) != 1 else "")
+            + " — holds that question."
         )
     else:
         sections.append(
-            f"The {reading.spread_name} spread reveals the present pattern through {len(reading.drawn_cards)} position"
+            f"The {reading.spread_name} spread opens across {len(reading.drawn_cards)} position"
             + ("s." if len(reading.drawn_cards) != 1 else ".")
         )
 
-    sections.extend(_interpret_drawn_card(drawn) for drawn in reading.drawn_cards)
+    # Card-by-card
+    for drawn in reading.drawn_cards:
+        sections.append(_interpret_drawn_card(drawn, names_in_reading))
 
+    # Pattern analysis
     pattern_sentences = _pattern_sentences(reading)
-    if pattern_sentences:
-        sections.append("Pattern-wise, " + " ".join(pattern_sentences))
+    tension_sentences = _elemental_tension_sentences(reading)
+    all_pattern = pattern_sentences + tension_sentences
+    if all_pattern:
+        sections.append("Looking at the spread as a whole: " + " ".join(all_pattern))
 
-    if reading.spread_name.lower() == "yes/no" and reading.drawn_cards:
+    # Yes/No direct answer
+    if reading.spread_name.lower() in ("yes/no", "yes-no") and reading.drawn_cards:
         answer_card = reading.drawn_cards[0]
-        leaning = "not yet" if answer_card.reversed else "yes, with momentum"
-        sections.append(f"As a direct answer, the reading leans {leaning}.")
+        leaning = "not yet — the energy is present but meeting resistance" if answer_card.reversed else "yes, and with real momentum behind it"
+        sections.append(f"As a direct answer to your question, this reading leans {leaning}.")
+
+    # Closing synthesis
+    close = _closing_synthesis(reading)
+    if close:
+        sections.append(close)
 
     return "\n\n".join(section.strip() for section in sections if section.strip())
+
+
+# Trigram-to-tarot-element mapping for cross-system synthesis
+_TRIGRAM_ELEMENTS: dict[str, str] = {
+    "Heaven": "air",
+    "Wind": "air",
+    "Fire": "fire",
+    "Thunder": "fire",
+    "Water": "water",
+    "Lake": "water",
+    "Earth": "earth",
+    "Mountain": "earth",
+}
+
+
+def synthesize_combined(reading: "Reading", consultation: Any) -> str:
+    """Generate a 2-3 sentence cross-system synthesis from a combined tarot + I Ching reading."""
+    analysis = analyze_patterns(reading)
+    dominant_element = analysis.get("dominant_element")
+    primary = consultation.primary_hexagram
+
+    parts: list[str] = []
+
+    # Check if tarot dominant element aligns with hexagram trigrams
+    lower_element = _TRIGRAM_ELEMENTS.get(primary.lower_trigram)
+    upper_element = _TRIGRAM_ELEMENTS.get(primary.upper_trigram)
+    trigram_elements = {e for e in (lower_element, upper_element) if e}
+
+    if dominant_element and dominant_element in trigram_elements:
+        trigram_name = primary.upper_trigram if upper_element == dominant_element else primary.lower_trigram
+        parts.append(
+            f"Both systems converge on {dominant_element}: the tarot cards lean heavily toward this element, "
+            f"and the I Ching echoes it through the {trigram_name} trigram. "
+            f"When two oracles point the same direction, the message is hard to ignore."
+        )
+    elif dominant_element:
+        hex_energy = primary.lower_trigram if primary.lower_trigram else primary.upper_trigram
+        parts.append(
+            f"The tarot draws toward {dominant_element}, while the I Ching's {hex_energy} trigram carries a different current. "
+            f"These two systems aren't saying the same thing — hold both, and notice where they diverge."
+        )
+
+    # Note if both systems suggest transition or stability
+    has_changing = bool(consultation.changing_lines)
+    reversal_count = analysis.get("reversal_count", 0)
+    total_cards = len(reading.drawn_cards) if reading.drawn_cards else 1
+
+    if has_changing and reversal_count > 0:
+        parts.append(
+            f"The reversed cards and the changing lines both suggest active friction — something is resisting or shifting. "
+            f"This is not a stable moment; it is asking for a decision."
+        )
+    elif not has_changing and reversal_count == 0:
+        parts.append(
+            "Neither system shows movement — no changing lines, no reversed cards. "
+            "This reading describes a condition in full force, not a turning point."
+        )
+
+    return " ".join(parts).strip()
 
 
 def generate_educational_tips(reading: Reading) -> list[str]:
@@ -750,6 +1046,133 @@ def generate_educational_tips(reading: Reading) -> list[str]:
             break
 
     return tips[:6]
+
+
+def _resolve_card_by_name(name: str, deck: list[Any]) -> Any:
+    """Find a card in the deck by name, with fuzzy matching.
+
+    Accepts formats like:
+    - "Two of Swords"
+    - "two of swords"
+    - "2 of swords"
+    - "The High Priestess"
+    - "high priestess"
+    - "page of cups"
+    """
+    target = name.strip().lower()
+
+    # Direct match
+    for card in deck:
+        if _card_name(card).strip().lower() == target:
+            return card
+
+    # Match without leading "the"
+    target_no_the = target.removeprefix("the ")
+    for card in deck:
+        card_name = _card_name(card).strip().lower()
+        if card_name.removeprefix("the ") == target_no_the:
+            return card
+
+    # Number word to digit substitution ("two of swords" -> "2 of swords")
+    word_to_digit = {
+        "ace": "1", "one": "1",
+        "two": "2", "three": "3", "four": "4", "five": "5",
+        "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
+        "page": "11", "knight": "12", "queen": "13", "king": "14",
+    }
+    words = target.split()
+    digit_target = " ".join(word_to_digit.get(w, w) for w in words)
+    if digit_target != target:
+        for card in deck:
+            card_name = _card_name(card).strip().lower()
+            card_digit = " ".join(word_to_digit.get(w, w) for w in card_name.split())
+            if card_digit == digit_target or card_name == digit_target:
+                return card
+
+    # Partial match: check if target contains all words of a card name (minus "of", "the")
+    stop_words = {"of", "the", "in", "a", "an"}
+    target_tokens = {w for w in target.split() if w not in stop_words}
+    for card in deck:
+        card_tokens = {w for w in _card_name(card).strip().lower().split() if w not in stop_words}
+        if target_tokens and target_tokens.issubset(card_tokens):
+            return card
+
+    raise ValueError(
+        f"Card '{name}' not found in deck. "
+        f"Use exact names like 'Two of Swords', 'The High Priestess', or 'Page of Cups'."
+    )
+
+
+def _parse_card_spec(spec: str, deck: list[Any]) -> tuple[Any, bool]:
+    """Parse a card specification like 'Two of Swords' or 'Two of Swords rx'.
+
+    Returns (card_object, reversed_bool).
+    'rx' suffix marks a card as reversed.
+    """
+    spec = spec.strip()
+    reversed_card = False
+
+    # Check for reversed markers: 'rx', 'reversed', 'rev', '(r)', '(rx)'
+    reversed_markers = [" rx", " reversed", " rev", " (r)", " (rx)"]
+    for marker in reversed_markers:
+        if spec.lower().endswith(marker):
+            spec = spec[: -len(marker)].strip()
+            reversed_card = True
+            break
+
+    card = _resolve_card_by_name(spec, deck)
+    return card, reversed_card
+
+
+def draw_manual_reading(
+    spread_name: str,
+    card_specs: list[str],
+    query: str | None = None,
+) -> Reading:
+    """Draw a reading from manually specified cards instead of random draw.
+
+    card_specs is a list of card name strings, one per position in the spread.
+    Append 'rx' to mark a card reversed: 'Two of Swords rx'.
+
+    Example:
+        draw_manual_reading(
+            "three-card",
+            ["Two of Swords", "Two of Pentacles", "Page of Cups"],
+            query="What about this decision?",
+        )
+    """
+    resolved_name, positions = _resolve_spread(spread_name)
+    deck = list(_get_deck())
+
+    if len(card_specs) != len(positions):
+        raise ValueError(
+            f"Spread '{resolved_name}' has {len(positions)} positions, "
+            f"but {len(card_specs)} card{'s' if len(card_specs) != 1 else ''} "
+            f"were specified. Need exactly {len(positions)} cards."
+        )
+
+    drawn_cards = []
+    used_names: list[str] = []
+    for position_name, spec in zip(positions, card_specs):
+        card, reversed_card = _parse_card_spec(spec, deck)
+        drawn_cards.append(
+            DrawnCard(
+                card=card,
+                position_name=position_name,
+                reversed=reversed_card,
+            )
+        )
+        used_names.append(_card_name(card))
+
+    reading = Reading(
+        spread_name=resolved_name,
+        query=query,
+        drawn_cards=drawn_cards,
+        timestamp=datetime.now(timezone.utc),
+        interpretation="",
+    )
+    reading.interpretation = interpret_reading(reading)
+    return reading
 
 
 def draw_reading(spread_name: str, query: str | None = None) -> Reading:
@@ -860,6 +1283,7 @@ __all__ = [
     "DrawnCard",
     "Reading",
     "analyze_patterns",
+    "draw_manual_reading",
     "draw_reading",
     "generate_educational_tips",
     "interpret_reading",

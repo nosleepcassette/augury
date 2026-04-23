@@ -83,6 +83,7 @@ On the CLI side, `augury iching ...` and standalone `iching ...` both expose cas
 - Built-in I Ching casting model using three coins with yarrow-stalk probabilities
 - Combined reading flow that runs one query through both backends, with a tarot-defaults vs. configure-tarot picker
 - CLI commands for tarot via `augury read`, `augury daily`, `augury card`, and namespaced tarot commands via `augury tarot ...`
+- Manual reading mode: log physical card pulls with `--manual` and get full interpretation pipeline
 - Full I Ching CLI via `augury iching ...` and standalone `iching ...`
 - Combined CLI via `augury combined ...`
 - Markdown rendering via `augury render` and `oracle-render`
@@ -141,6 +142,12 @@ Draw a reading from the CLI:
 
 ```bash
 augury read --spread three-card --query "What should I pay attention to this week?"
+```
+
+Log a reading from a physical deck:
+
+```bash
+augury read --manual "Two of Swords, Two of Pentacles, Page of Cups" --query "What about this decision?"
 ```
 
 Emit machine-readable JSON without writing to history:

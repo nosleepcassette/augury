@@ -15,7 +15,7 @@ import tty
 from dataclasses import asdict, dataclass, is_dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Sequence
 
 from . import __version__
 from . import art as art_module
@@ -36,6 +36,8 @@ from .config import (
     save_system_preferences,
 )
 from .systems.iching import cli as iching_cli
+
+DEFAULT_ORACLE_RENDER_FONT = "arial"
 
 try:
     from rich import box
@@ -150,8 +152,8 @@ READINGS_PATH = DATA_DIR / "readings.jsonl"
 SPREADS_PATH = APP_PATHS.spreads_path
 PREFS_PATH = APP_PATHS.prefs_path
 INTEGRATIONS_PATH = APP_PATHS.integrations_path
-LOGO_LINES = [
-    "8888b.  888  888  .d88b.  888  888 888d888 888  888",
+AUGURY_LOGO_LINES = [
+    " 8888b.  888  888  .d88b.  888  888 888d888 888  888",
     '    "88b 888  888 d88P"88b 888  888 888P"   888  888',
     ".d888888 888  888 888  888 888  888 888     888  888",
     "888  888 Y88b 888 Y88b 888 Y88b 888 888     Y88b 888",
@@ -160,9 +162,24 @@ LOGO_LINES = [
     "                  Y8b d88P                  Y8b d88P",
     '                   "Y88P"                    "Y88P"',
 ]
-TAGLINES = [
+AUGURY_TAGLINES = [
+    "suite chooser",
+    "tarot, i ching, combined",
+    "render, read, remember",
+]
+TAROT_LOGO_LINES = [
+    ".sSSSSSSSSSSSSSs. .sSSSSs.    .sSSSSSSSs. .sSSSSs.    .sSSSSSSSSSSSSSs.",
+    "SSSSS S SSS SSSSS S SSSSSSSs. S SSS SSSSS S SSSSSSSs. SSSSS S SSS SSSSS",
+    "SSSSS S  SS SSSSS S  SS SSSSS S  SS SSSS' S  SS SSSSS SSSSS S  SS SSSSS",
+    "`:S:' S..SS `:S:' S..SSsSSSSS S..SSsSSSa. S..SS SSSSS `:S:' S..SS `:S:'",
+    "      S:::S       S:::S SSSSS S:::S SSSSS S:::S SSSSS       S:::S      ",
+    "      S;;;S       S;;;S SSSSS S;;;S SSSSS S;;;S SSSSS       S;;;S      ",
+    "      S%%%S       S%%%S SSSSS S%%%S SSSSS S%%%S SSSSS       S%%%S      ",
+    "      SSSSS       SSSSS SSSSS SSSSS SSSSS SSSSSsSSSSS       SSSSS      ",
+]
+TAROT_TAGLINES = [
     "tarot terminal",
-    "draw, read, remember",
+    "cards, spreads, history",
     "amber light, no altars required",
 ]
 DEFAULT_PREFS = {
@@ -173,6 +190,7 @@ DEFAULT_PREFS = {
 }
 PENDING_ESCAPE = False
 PENDING_ESCAPE_PREFIX = ""
+FRAME_CAPTURE_ACTIVE = False
 MENU_ITEMS = [
     ("n", "&New Reading", "new_reading"),
     ("d", "&Daily Card", "daily_card"),
@@ -1047,11 +1065,56 @@ def _interpret_stub_note() -> dict[str, Any]:
     }
 
 
+def _terminal_writer(console: Console) -> Any:
+    return getattr(console, "file", sys.stdout)
+
+
+def _ansi_clear(writer: Any) -> None:
+    writer.write("\x1b[2J\x1b[H")
+    writer.flush()
+
+
+def _paint_frame(writer: Any, frame: str) -> None:
+    lines = frame.splitlines(keepends=True)
+    payload = ["\x1b[H"]
+    for line in lines:
+        payload.append("\x1b[2K")
+        payload.append(line)
+    if frame and not frame.endswith(("\n", "\r")):
+        payload.append("\x1b[2K")
+    payload.append("\x1b[J")
+    writer.write("".join(payload))
+    writer.flush()
+
+
 def _clear_screen(console: Console) -> None:
+    if FRAME_CAPTURE_ACTIVE:
+        return
+    writer = _terminal_writer(console)
+    if hasattr(writer, "isatty") and writer.isatty():
+        _ansi_clear(writer)
+        return
     if HAS_RICH:
         console.clear()
-    else:
-        os.system("clear")
+        return
+    os.system("clear")
+
+
+def _render_frame(console: Console, render_fn: Callable[[], None]) -> None:
+    writer = _terminal_writer(console)
+    if not (HAS_RICH and hasattr(console, "capture") and hasattr(writer, "isatty") and writer.isatty()):
+        _clear_screen(console)
+        render_fn()
+        return
+    global FRAME_CAPTURE_ACTIVE
+    FRAME_CAPTURE_ACTIVE = True
+    try:
+        with console.capture() as capture:
+            render_fn()
+        frame = capture.get()
+    finally:
+        FRAME_CAPTURE_ACTIVE = False
+    _paint_frame(writer, frame)
 
 
 def _centered(console: Console, markup: str, plain_text: str | None = None) -> str:
@@ -1061,12 +1124,19 @@ def _centered(console: Console, markup: str, plain_text: str | None = None) -> s
     return (" " * padding) + markup
 
 
-def _banner(console: Console, subtitle: str = "") -> str:
+def _banner(
+    console: Console,
+    subtitle: str = "",
+    *,
+    logo_lines: Sequence[str] = TAROT_LOGO_LINES,
+    taglines: Sequence[str] = TAROT_TAGLINES,
+) -> str:
     lines = []
-    for line in LOGO_LINES:
-        lines.append(_centered(console, f"[bold {AMBER}]{line}[/]", line))
+    logo_width = max((len(line) for line in logo_lines), default=0)
+    for line in logo_lines:
+        lines.append(_centered(console, f"[bold {AMBER}]{line}[/]", line.ljust(logo_width)))
     lines.append("")
-    for index, tagline in enumerate(TAGLINES):
+    for index, tagline in enumerate(taglines):
         color = AMBER_SOFT if index == 0 else STONE if index == 1 else AMBER_DIM
         style = "bold" if index == 0 else "dim"
         lines.append(_centered(console, f"[{style} {color}]{tagline}[/]", tagline))
@@ -1307,7 +1377,7 @@ def _show_card_detail(console: Console, card: Any) -> None:
         return
 
 
-def _show_reading(console: Console, reading: Any, title: str = "reading") -> None:
+def _show_reading(console: Console, reading: Any, title: str = "reading", llm_text: str | None = None) -> None:
     _clear_screen(console)
     subtitle = f"{reading.spread_name}  ·  {_timestamp_text(reading)}"
     console.print(_banner(console, subtitle))
@@ -1344,11 +1414,25 @@ def _show_reading(console: Console, reading: Any, title: str = "reading") -> Non
                 padding=(0, 1),
             )
         )
+        if llm_text:
+            console.print(
+                Panel(
+                    Text(llm_text, style=STONE),
+                    title="Deep Interpretation",
+                    border_style=AMBER,
+                    box=box.ASCII,
+                    padding=(1, 2),
+                )
+            )
     else:
         console.print(title)
         console.print(reading.interpretation)
         for drawn in reading.drawn_cards:
             console.print(_render_card_panel(drawn))
+        if llm_text:
+            console.print("")
+            console.print("Deep Interpretation")
+            console.print(llm_text)
     console.print("")
     console.print("[dim]enter to return[/dim]" if HAS_RICH else "enter to return")
     try:
@@ -1419,12 +1503,21 @@ def _show_combined_reading(
     tarot_show_tips: bool = True,
     iching_show_trigrams: bool = True,
     iching_show_line_text: bool = True,
+    llm_text: str | None = None,
 ) -> None:
+    from .engine import synthesize_combined
     from .systems.iching.engine import generate_study_tips
 
     _clear_screen(console)
     subtitle = f"combined reading  ·  {_timestamp_text(reading)}"
-    console.print(_banner(console, subtitle))
+    console.print(
+        _banner(
+            console,
+            subtitle,
+            logo_lines=AUGURY_LOGO_LINES,
+            taglines=AUGURY_TAGLINES,
+        )
+    )
     console.print("")
     if query and HAS_RICH:
         console.print(
@@ -1518,12 +1611,42 @@ def _show_combined_reading(
                 padding=(0, 1),
             )
         )
+        synthesis = synthesize_combined(reading, consultation)
+        if synthesis:
+            console.print(
+                Panel(
+                    Text(synthesis, style=STONE),
+                    title="Synthesis",
+                    border_style=AMBER,
+                    box=box.ASCII,
+                    padding=(1, 2),
+                )
+            )
+        if llm_text:
+            console.print(
+                Panel(
+                    Text(llm_text, style=STONE),
+                    title="Deep Interpretation",
+                    border_style=AMBER,
+                    box=box.ASCII,
+                    padding=(1, 2),
+                )
+            )
     else:
         console.print("Tarot")
         console.print(reading.interpretation)
         console.print("")
         console.print("I Ching")
         console.print(consultation.interpretation)
+        synthesis = synthesize_combined(reading, consultation)
+        if synthesis:
+            console.print("")
+            console.print("Synthesis")
+            console.print(synthesis)
+        if llm_text:
+            console.print("")
+            console.print("Deep Interpretation")
+            console.print(llm_text)
     console.print("")
     console.print("[dim]enter to return[/dim]" if HAS_RICH else "enter to return")
     try:
@@ -1572,42 +1695,44 @@ class AuguryApp:
         subtitle = (
             f"v{VERSION}  ·  deck {len(_get_all_cards())}  ·  readings {len(readings)}  ·  spreads {len(spreads)}"
         )
-        _clear_screen(self.console)
-        self.console.print(_banner(self.console, subtitle))
-        self.console.print("")
-        if HAS_RICH:
-            stats = Table.grid(padding=(0, 3))
-            stats.add_column(style=AMBER_SOFT)
-            stats.add_column(style=STONE)
-            stats.add_row("Default Spread", str(self.prefs.get("default_spread", "three-card")))
-            stats.add_row("Reversals", "on" if self.prefs.get("allow_reversals", True) else "off")
-            stats.add_row("Tips", "on" if self.prefs.get("show_tips", True) else "off")
-            self.console.print(
-                Align.center(
-                    Panel(
-                        stats,
-                        title="Current State",
-                        border_style=AMBER,
-                        box=box.ASCII,
-                        padding=(0, 2),
-                        expand=False,
+        def _render() -> None:
+            self.console.print(_banner(self.console, subtitle))
+            self.console.print("")
+            if HAS_RICH:
+                stats = Table.grid(padding=(0, 3))
+                stats.add_column(style=AMBER_SOFT)
+                stats.add_column(style=STONE)
+                stats.add_row("Default Spread", str(self.prefs.get("default_spread", "three-card")))
+                stats.add_row("Reversals", "on" if self.prefs.get("allow_reversals", True) else "off")
+                stats.add_row("Tips", "on" if self.prefs.get("show_tips", True) else "off")
+                self.console.print(
+                    Align.center(
+                        Panel(
+                            stats,
+                            title="Current State",
+                            border_style=AMBER,
+                            box=box.ASCII,
+                            padding=(0, 2),
+                            expand=False,
+                        )
                     )
                 )
-            )
+                self.console.print("")
+            label_width = max(len(item[1].replace("&", "")) for item in MENU_ITEMS)
+            for index, (_hotkey, label, _action) in enumerate(MENU_ITEMS):
+                styled, plain = _menu_label(label, index == selected)
+                padding = " " * (label_width - len(plain))
+                if index == selected:
+                    markup = f"[bold {AMBER}]>===<[/]  {styled}{padding}"
+                    raw = f">===<  {plain}{padding}"
+                else:
+                    markup = f"[{AMBER_DIM}].....[/]  {styled}{padding}"
+                    raw = f".....  {plain}{padding}"
+                self.console.print(_centered(self.console, markup, raw))
             self.console.print("")
-        label_width = max(len(item[1].replace("&", "")) for item in MENU_ITEMS)
-        for index, (_hotkey, label, _action) in enumerate(MENU_ITEMS):
-            styled, plain = _menu_label(label, index == selected)
-            padding = " " * (label_width - len(plain))
-            if index == selected:
-                markup = f"[bold {AMBER}]>===<[/]  {styled}{padding}"
-                raw = f">===<  {plain}{padding}"
-            else:
-                markup = f"[{AMBER_DIM}].....[/]  {styled}{padding}"
-                raw = f".....  {plain}{padding}"
-            self.console.print(_centered(self.console, markup, raw))
-        self.console.print("")
-        self.console.print(_centered(self.console, f"[dim]{MENU_HINT}[/dim]", MENU_HINT))
+            self.console.print(_centered(self.console, f"[dim]{MENU_HINT}[/dim]", MENU_HINT))
+
+        _render_frame(self.console, _render)
 
     def run(self) -> int:
         if not sys.stdin.isatty():
@@ -1669,26 +1794,28 @@ class AuguryApp:
             except Exception:
                 return spreads[index]
         while True:
-            _clear_screen(self.console)
             spread = spreads[index]
-            self.console.print(_banner(self.console, "choose spread"))
-            self.console.print("")
-            if HAS_RICH:
-                table = Table(show_header=True, header_style=f"bold {AMBER}", box=box.ASCII, padding=(0, 1))
-                table.add_column("#", style="dim", width=4)
-                table.add_column("spread", style=AMBER_SOFT, min_width=18)
-                table.add_column("cards", style=STONE, width=6)
-                table.add_column("description", style=STONE)
-                for row_index, item in enumerate(spreads, start=1):
-                    style = f"bold {AMBER}" if row_index - 1 == index else ""
-                    table.add_row(str(row_index), item["name"], str(len(item["positions"])), item.get("description", ""), style=style)
-                self.console.print(table)
-            else:
-                for row_index, item in enumerate(spreads, start=1):
-                    cursor = ">" if row_index - 1 == index else " "
-                    self.console.print(f"{cursor} {row_index:2}. {item['name']} ({len(item['positions'])})")
-            self.console.print("")
-            self.console.print("[dim]j/k move  enter choose  q cancel[/dim]" if HAS_RICH else "j/k move, enter choose, q cancel")
+            def _render() -> None:
+                self.console.print(_banner(self.console, "choose spread"))
+                self.console.print("")
+                if HAS_RICH:
+                    table = Table(show_header=True, header_style=f"bold {AMBER}", box=box.ASCII, padding=(0, 1))
+                    table.add_column("#", style="dim", width=4)
+                    table.add_column("spread", style=AMBER_SOFT, min_width=18)
+                    table.add_column("cards", style=STONE, width=6)
+                    table.add_column("description", style=STONE)
+                    for row_index, item in enumerate(spreads, start=1):
+                        style = f"bold {AMBER}" if row_index - 1 == index else ""
+                        table.add_row(str(row_index), item["name"], str(len(item["positions"])), item.get("description", ""), style=style)
+                    self.console.print(table)
+                else:
+                    for row_index, item in enumerate(spreads, start=1):
+                        cursor_mark = ">" if row_index - 1 == index else " "
+                        self.console.print(f"{cursor_mark} {row_index:2}. {item['name']} ({len(item['positions'])})")
+                self.console.print("")
+                self.console.print("[dim]j/k move  enter choose  q cancel[/dim]" if HAS_RICH else "j/k move, enter choose, q cancel")
+
+            _render_frame(self.console, _render)
             key = _read_key()
             if key in ("UP", "k"):
                 index = (index - 1) % len(spreads)
@@ -1750,45 +1877,47 @@ class AuguryApp:
             page_size = max(8, _terminal_rows() - 14)
             start, end = _window_bounds(len(filtered), cursor, page_size)
             page_cards = filtered[start:end]
-            _clear_screen(self.console)
             subtitle = f"filter {FILTER_OPTIONS[filter_index][1]}  |  matches {len(filtered)}"
-            self.console.print(_banner(self.console, subtitle))
-            self.console.print("")
-            if HAS_RICH:
-                table = Table(show_header=True, header_style=f"bold {AMBER}", box=box.ASCII, padding=(0, 1))
-                table.add_column("#", style="dim", width=4)
-                table.add_column("card", style=AMBER_SOFT)
-                table.add_column("arcana", style=STONE, width=8)
-                table.add_column("suit", style=STONE, width=12)
-                table.add_column("keywords", style=STONE)
-                for absolute_index, card in enumerate(page_cards, start=start):
-                    style = f"bold {AMBER}" if absolute_index == cursor else ""
-                    table.add_row(
-                        str(absolute_index + 1),
-                        _card_name(card),
-                        _card_arcana(card),
-                        str(_card_suit(card) or "-"),
-                        ", ".join(_card_keywords(card, False)[:3]),
-                        style=style,
+            def _render() -> None:
+                self.console.print(_banner(self.console, subtitle))
+                self.console.print("")
+                if HAS_RICH:
+                    table = Table(show_header=True, header_style=f"bold {AMBER}", box=box.ASCII, padding=(0, 1))
+                    table.add_column("#", style="dim", width=4)
+                    table.add_column("card", style=AMBER_SOFT)
+                    table.add_column("arcana", style=STONE, width=8)
+                    table.add_column("suit", style=STONE, width=12)
+                    table.add_column("keywords", style=STONE)
+                    for absolute_index, card in enumerate(page_cards, start=start):
+                        style = f"bold {AMBER}" if absolute_index == cursor else ""
+                        table.add_row(
+                            str(absolute_index + 1),
+                            _card_name(card),
+                            _card_arcana(card),
+                            str(_card_suit(card) or "-"),
+                            ", ".join(_card_keywords(card, False)[:3]),
+                            style=style,
+                        )
+                    self.console.print(table)
+                else:
+                    for absolute_index, card in enumerate(page_cards, start=start):
+                        cursor_mark = ">" if absolute_index == cursor else " "
+                        self.console.print(f"{cursor_mark} {absolute_index + 1:2}. {_card_name(card)}")
+                if filtered and len(filtered) > len(page_cards):
+                    self.console.print("")
+                    self.console.print(
+                        f"[dim]showing {start + 1}-{end} of {len(filtered)}[/dim]"
+                        if HAS_RICH
+                        else f"showing {start + 1}-{end} of {len(filtered)}"
                     )
-                self.console.print(table)
-            else:
-                for absolute_index, card in enumerate(page_cards, start=start):
-                    cursor_mark = ">" if absolute_index == cursor else " "
-                    self.console.print(f"{cursor_mark} {absolute_index + 1:2}. {_card_name(card)}")
-            if filtered and len(filtered) > len(page_cards):
                 self.console.print("")
                 self.console.print(
-                    f"[dim]showing {start + 1}-{end} of {len(filtered)}[/dim]"
+                    "[dim]j/k move  f cycle filter  / search  enter view  q back[/dim]"
                     if HAS_RICH
-                    else f"showing {start + 1}-{end} of {len(filtered)}"
+                    else "j/k move, f cycle filter, / search, enter view, q back"
                 )
-            self.console.print("")
-            self.console.print(
-                "[dim]j/k move  f cycle filter  / search  enter view  q back[/dim]"
-                if HAS_RICH
-                else "j/k move, f cycle filter, / search, enter view, q back"
-            )
+
+            _render_frame(self.console, _render)
             key = _read_key()
             if key in ("UP", "k") and filtered:
                 cursor = (cursor - 1) % len(filtered)
@@ -1822,40 +1951,42 @@ class AuguryApp:
             page_size = max(8, _terminal_rows() - 14)
             start, end = _window_bounds(len(readings), cursor, page_size)
             page_readings = readings[start:end]
-            _clear_screen(self.console)
-            self.console.print(_banner(self.console, f"reading history  |  showing {len(readings)}"))
-            self.console.print("")
-            if HAS_RICH:
-                table = Table(show_header=True, header_style=f"bold {AMBER}", box=box.ASCII, padding=(0, 1))
-                table.add_column("#", style="dim", width=4)
-                table.add_column("when", style=STONE, width=18)
-                table.add_column("spread", style=AMBER_SOFT, width=18)
-                table.add_column("cards", style=STONE)
-                table.add_column("query", style=STONE)
-                for absolute_index, reading in enumerate(page_readings, start=start):
-                    style = f"bold {AMBER}" if absolute_index == cursor else ""
-                    table.add_row(
-                        str(absolute_index + 1),
-                        _timestamp_text(reading),
-                        reading.spread_name,
-                        _summary_cards(reading),
-                        str(reading.query or "-"),
-                        style=style,
-                    )
-                self.console.print(table)
-            else:
-                for absolute_index, reading in enumerate(page_readings, start=start):
-                    cursor_mark = ">" if absolute_index == cursor else " "
-                    self.console.print(f"{cursor_mark} {absolute_index + 1:2}. {_timestamp_text(reading)}  {reading.spread_name}")
-            if len(readings) > len(page_readings):
+            def _render() -> None:
+                self.console.print(_banner(self.console, f"reading history  |  showing {len(readings)}"))
                 self.console.print("")
-                self.console.print(
-                    f"[dim]showing {start + 1}-{end} of {len(readings)}[/dim]"
-                    if HAS_RICH
-                    else f"showing {start + 1}-{end} of {len(readings)}"
-                )
-            self.console.print("")
-            self.console.print("[dim]j/k move  enter view  q back[/dim]" if HAS_RICH else "j/k move, enter view, q back")
+                if HAS_RICH:
+                    table = Table(show_header=True, header_style=f"bold {AMBER}", box=box.ASCII, padding=(0, 1))
+                    table.add_column("#", style="dim", width=4)
+                    table.add_column("when", style=STONE, width=18)
+                    table.add_column("spread", style=AMBER_SOFT, width=18)
+                    table.add_column("cards", style=STONE)
+                    table.add_column("query", style=STONE)
+                    for absolute_index, reading in enumerate(page_readings, start=start):
+                        style = f"bold {AMBER}" if absolute_index == cursor else ""
+                        table.add_row(
+                            str(absolute_index + 1),
+                            _timestamp_text(reading),
+                            reading.spread_name,
+                            _summary_cards(reading),
+                            str(reading.query or "-"),
+                            style=style,
+                        )
+                    self.console.print(table)
+                else:
+                    for absolute_index, reading in enumerate(page_readings, start=start):
+                        cursor_mark = ">" if absolute_index == cursor else " "
+                        self.console.print(f"{cursor_mark} {absolute_index + 1:2}. {_timestamp_text(reading)}  {reading.spread_name}")
+                if len(readings) > len(page_readings):
+                    self.console.print("")
+                    self.console.print(
+                        f"[dim]showing {start + 1}-{end} of {len(readings)}[/dim]"
+                        if HAS_RICH
+                        else f"showing {start + 1}-{end} of {len(readings)}"
+                    )
+                self.console.print("")
+                self.console.print("[dim]j/k move  enter view  q back[/dim]" if HAS_RICH else "j/k move, enter view, q back")
+
+            _render_frame(self.console, _render)
             key = _read_key()
             if key in ("UP", "k"):
                 cursor = (cursor - 1) % len(readings)
@@ -1871,31 +2002,33 @@ class AuguryApp:
     def manage_custom_spreads(self) -> None:
         while True:
             self.refresh()
-            _clear_screen(self.console)
-            self.console.print(_banner(self.console, "custom spreads"))
-            self.console.print("")
             spreads = self.custom_spread_defs
-            if HAS_RICH:
-                table = Table(show_header=True, header_style=f"bold {AMBER}", box=box.ASCII, padding=(0, 1))
-                table.add_column("#", style="dim", width=4)
-                table.add_column("name", style=AMBER_SOFT)
-                table.add_column("positions", style=STONE)
-                table.add_column("description", style=STONE)
-                for index, spread in enumerate(spreads, start=1):
-                    table.add_row(
-                        str(index),
-                        spread["name"],
-                        ", ".join(spread["positions"]),
-                        spread.get("description", ""),
-                    )
-                self.console.print(table)
-            else:
-                for index, spread in enumerate(spreads, start=1):
-                    self.console.print(f"{index:2}. {spread['name']} -> {', '.join(spread['positions'])}")
-            self.console.print("")
-            self.console.print(
-                "[dim]a add  d delete  v view  q back[/dim]" if HAS_RICH else "a add, d delete, v view, q back"
-            )
+            def _render() -> None:
+                self.console.print(_banner(self.console, "custom spreads"))
+                self.console.print("")
+                if HAS_RICH:
+                    table = Table(show_header=True, header_style=f"bold {AMBER}", box=box.ASCII, padding=(0, 1))
+                    table.add_column("#", style="dim", width=4)
+                    table.add_column("name", style=AMBER_SOFT)
+                    table.add_column("positions", style=STONE)
+                    table.add_column("description", style=STONE)
+                    for index, spread in enumerate(spreads, start=1):
+                        table.add_row(
+                            str(index),
+                            spread["name"],
+                            ", ".join(spread["positions"]),
+                            spread.get("description", ""),
+                        )
+                    self.console.print(table)
+                else:
+                    for index, spread in enumerate(spreads, start=1):
+                        self.console.print(f"{index:2}. {spread['name']} -> {', '.join(spread['positions'])}")
+                self.console.print("")
+                self.console.print(
+                    "[dim]a add  d delete  v view  q back[/dim]" if HAS_RICH else "a add, d delete, v view, q back"
+                )
+
+            _render_frame(self.console, _render)
             key = _read_key()
             if key == "a":
                 name = self.prompt("spread name", "")
@@ -1975,27 +2108,29 @@ class AuguryApp:
         cursor = 0
         while True:
             self.refresh()
-            _clear_screen(self.console)
-            self.console.print(_banner(self.console, "preferences"))
-            self.console.print("")
-            if HAS_RICH:
-                table = Table(show_header=True, header_style=f"bold {AMBER}", box=box.ASCII, padding=(0, 1))
-                table.add_column("#", style="dim", width=4)
-                table.add_column("setting", style=AMBER_SOFT)
-                table.add_column("value", style=STONE)
-                for index, (key, label) in enumerate(options, start=1):
-                    style = f"bold {AMBER}" if index - 1 == cursor else ""
-                    value = self.prefs.get(key)
-                    table.add_row(str(index), label, str(value), style=style)
-                self.console.print(table)
-            else:
-                for index, (key, label) in enumerate(options, start=1):
-                    cursor_mark = ">" if index - 1 == cursor else " "
-                    self.console.print(f"{cursor_mark} {index:2}. {label}: {self.prefs.get(key)}")
-            self.console.print("")
-            self.console.print(
-                "[dim]j/k move  enter edit/toggle  q back[/dim]" if HAS_RICH else "j/k move, enter edit, q back"
-            )
+            def _render() -> None:
+                self.console.print(_banner(self.console, "preferences"))
+                self.console.print("")
+                if HAS_RICH:
+                    table = Table(show_header=True, header_style=f"bold {AMBER}", box=box.ASCII, padding=(0, 1))
+                    table.add_column("#", style="dim", width=4)
+                    table.add_column("setting", style=AMBER_SOFT)
+                    table.add_column("value", style=STONE)
+                    for index, (key, label) in enumerate(options, start=1):
+                        style = f"bold {AMBER}" if index - 1 == cursor else ""
+                        value = self.prefs.get(key)
+                        table.add_row(str(index), label, str(value), style=style)
+                    self.console.print(table)
+                else:
+                    for index, (key, label) in enumerate(options, start=1):
+                        cursor_mark = ">" if index - 1 == cursor else " "
+                        self.console.print(f"{cursor_mark} {index:2}. {label}: {self.prefs.get(key)}")
+                self.console.print("")
+                self.console.print(
+                    "[dim]j/k move  enter edit/toggle  q back[/dim]" if HAS_RICH else "j/k move, enter edit, q back"
+                )
+
+            _render_frame(self.console, _render)
             key = _read_key()
             if key in ("UP", "k"):
                 cursor = (cursor - 1) % len(options)
@@ -2054,18 +2189,27 @@ class SystemChooserApp:
                 return options[0][0]
         cursor = 0
         while True:
-            _clear_screen(self.console)
-            self.console.print(_banner(self.console, "combined reading  ·  tarot setup"))
-            self.console.print("")
-            table = Table(show_header=True, header_style=f"bold {AMBER}", box=box.ASCII, padding=(0, 1))
-            table.add_column("#", style="dim", width=4)
-            table.add_column("mode", style=AMBER_SOFT)
-            for index, (_key, label) in enumerate(options, start=1):
-                style = f"bold {AMBER}" if index - 1 == cursor else ""
-                table.add_row(str(index), label, style=style)
-            self.console.print(table)
-            self.console.print("")
-            self.console.print("[dim]j/k move  enter choose  q cancel[/dim]")
+            def _render() -> None:
+                self.console.print(
+                    _banner(
+                        self.console,
+                        "combined reading  ·  tarot setup",
+                        logo_lines=AUGURY_LOGO_LINES,
+                        taglines=AUGURY_TAGLINES,
+                    )
+                )
+                self.console.print("")
+                table = Table(show_header=True, header_style=f"bold {AMBER}", box=box.ASCII, padding=(0, 1))
+                table.add_column("#", style="dim", width=4)
+                table.add_column("mode", style=AMBER_SOFT)
+                for index, (_key, label) in enumerate(options, start=1):
+                    style = f"bold {AMBER}" if index - 1 == cursor else ""
+                    table.add_row(str(index), label, style=style)
+                self.console.print(table)
+                self.console.print("")
+                self.console.print("[dim]j/k move  enter choose  q cancel[/dim]")
+
+            _render_frame(self.console, _render)
             key = _read_key()
             if key in ("UP", "k"):
                 cursor = (cursor - 1) % len(options)
@@ -2127,42 +2271,51 @@ class SystemChooserApp:
         subtitle = (
             f"v{VERSION}  ·  tarot {len(tarot_readings)} readings  ·  i ching {len(iching_consultations)} consultations"
         )
-        _clear_screen(self.console)
-        self.console.print(_banner(self.console, subtitle))
-        self.console.print("")
-        if HAS_RICH:
-            stats = Table.grid(padding=(0, 3))
-            stats.add_column(style=AMBER_SOFT)
-            stats.add_column(style=STONE)
-            stats.add_row("Tarot Deck", str(len(_get_all_cards())))
-            stats.add_row("I Ching Text", "64 hexagrams")
-            stats.add_row("Launch", "choose a system or combined reading")
+        def _render() -> None:
             self.console.print(
-                Align.center(
-                    Panel(
-                        stats,
-                        title="Systems",
-                        border_style=AMBER,
-                        box=box.ASCII,
-                        padding=(0, 2),
-                        expand=False,
-                    )
+                _banner(
+                    self.console,
+                    subtitle,
+                    logo_lines=AUGURY_LOGO_LINES,
+                    taglines=AUGURY_TAGLINES,
                 )
             )
             self.console.print("")
-        label_width = max(len(item[1].replace("&", "")) for item in SYSTEM_MENU_ITEMS)
-        for index, (_hotkey, label, _action) in enumerate(SYSTEM_MENU_ITEMS):
-            styled, plain = _menu_label(label, index == selected)
-            padding = " " * (label_width - len(plain))
-            if index == selected:
-                markup = f"[bold {AMBER}]>===<[/]  {styled}{padding}"
-                raw = f">===<  {plain}{padding}"
-            else:
-                markup = f"[{AMBER_DIM}].....[/]  {styled}{padding}"
-                raw = f".....  {plain}{padding}"
-            self.console.print(_centered(self.console, markup, raw))
-        self.console.print("")
-        self.console.print(_centered(self.console, f"[dim]{SYSTEM_MENU_HINT}[/dim]", SYSTEM_MENU_HINT))
+            if HAS_RICH:
+                stats = Table.grid(padding=(0, 3))
+                stats.add_column(style=AMBER_SOFT)
+                stats.add_column(style=STONE)
+                stats.add_row("Tarot Deck", str(len(_get_all_cards())))
+                stats.add_row("I Ching Text", "64 hexagrams")
+                stats.add_row("Launch", "choose a system or combined reading")
+                self.console.print(
+                    Align.center(
+                        Panel(
+                            stats,
+                            title="Systems",
+                            border_style=AMBER,
+                            box=box.ASCII,
+                            padding=(0, 2),
+                            expand=False,
+                        )
+                    )
+                )
+                self.console.print("")
+            label_width = max(len(item[1].replace("&", "")) for item in SYSTEM_MENU_ITEMS)
+            for index, (_hotkey, label, _action) in enumerate(SYSTEM_MENU_ITEMS):
+                styled, plain = _menu_label(label, index == selected)
+                padding = " " * (label_width - len(plain))
+                if index == selected:
+                    markup = f"[bold {AMBER}]>===<[/]  {styled}{padding}"
+                    raw = f">===<  {plain}{padding}"
+                else:
+                    markup = f"[{AMBER_DIM}].....[/]  {styled}{padding}"
+                    raw = f".....  {plain}{padding}"
+                self.console.print(_centered(self.console, markup, raw))
+            self.console.print("")
+            self.console.print(_centered(self.console, f"[dim]{SYSTEM_MENU_HINT}[/dim]", SYSTEM_MENU_HINT))
+
+        _render_frame(self.console, _render)
 
     def _launch(self, action: str | None) -> int:
         if action == "tarot":
@@ -2394,21 +2547,107 @@ def _run_configure_command(args: argparse.Namespace) -> int:
 
 
 def _run_read_command(args: argparse.Namespace) -> int:
+    from .astrology import card_natal_resonance, fetch_current_sky, parse_natal_planets, fetch_natal_text
+    from .interpreter import interpret_tarot
+
     prefs = _load_prefs()
     custom_spreads = _load_custom_spreads()
     spread = _resolve_spread(args.spread or str(prefs.get("default_spread", "three-card")), custom_spreads)
-    reading = _draw_reading(spread, args.query, prefs)
+
+    manual_cards = getattr(args, "manual", None)
+    if manual_cards:
+        from . import engine as engine_module
+        card_specs = [c.strip() for c in manual_cards.split(",") if c.strip()]
+        try:
+            reading = engine_module.draw_manual_reading(
+                spread_name=args.spread or str(prefs.get("default_spread", "three-card")),
+                card_specs=card_specs,
+                query=args.query,
+            )
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+    else:
+        reading = _draw_reading(spread, args.query, prefs)
     if not args.no_save:
         _save_reading(reading)
-    payload = _apply_interpret_stub(_reading_to_json(reading), args.interpret)
+    reading_json = _reading_to_json(reading)
+    payload = dict(reading_json)
     payload["saved"] = not args.no_save
     payload["saved_to"] = None if args.no_save else str(READINGS_PATH)
+
+    with_astrology = getattr(args, "with_astrology", False)
+    profile_name = getattr(args, "profile", None) or getattr(args, "mirror", None)
+
+    sky_text: str | None = None
+    natal_resonance_notes: list[str] = []
+
+    if with_astrology:
+        sky_text = fetch_current_sky()
+        natal_text = fetch_natal_text()
+        if natal_text:
+            natal_planets = parse_natal_planets(natal_text)
+            if natal_planets:
+                for drawn in reading.drawn_cards:
+                    note = card_natal_resonance(drawn.card, natal_planets)
+                    if note:
+                        natal_resonance_notes.append(f"{drawn.position_name}: {note}")
+
     if args.json:
+        if sky_text:
+            payload["current_sky"] = sky_text
+        if natal_resonance_notes:
+            payload["natal_resonance"] = natal_resonance_notes
         return _emit_json(payload)
+
     console = Console(highlight=False, force_terminal=True) if HAS_RICH else Console()
+
+    if sky_text:
+        if HAS_RICH:
+            console.print(
+                Panel(
+                    Text(sky_text, style=STONE),
+                    title="Current Sky",
+                    border_style=AMBER,
+                    box=box.ASCII,
+                    padding=(1, 2),
+                )
+            )
+        else:
+            console.print("Current Sky")
+            console.print(sky_text)
+            console.print("")
+
+    if natal_resonance_notes:
+        notes_text = "\n".join(f"• {n}" for n in natal_resonance_notes)
+        if HAS_RICH:
+            console.print(
+                Panel(
+                    Text(notes_text, style=STONE),
+                    title="Natal Resonance",
+                    border_style=AMBER,
+                    box=box.ASCII,
+                    padding=(0, 2),
+                )
+            )
+        else:
+            console.print("Natal Resonance")
+            console.print(notes_text)
+            console.print("")
+
+    llm_text: str | None = None
     if args.interpret:
-        console.print(f"[bold {AMBER}]LLM mode stub:[/] using template interpretation only." if HAS_RICH else "LLM mode stub: using template interpretation only.")
-    _show_reading(console, reading, "reading")
+        console.print(f"[{AMBER}]Generating deep interpretation…[/]" if HAS_RICH else "Generating deep interpretation...")
+        if sky_text:
+            # Pass sky context into combined prompt via tarot interpret
+            reading_json_with_sky = dict(reading_json)
+            reading_json_with_sky["current_sky"] = sky_text
+            llm_text = interpret_tarot(reading_json_with_sky, query=args.query)
+        else:
+            llm_text = interpret_tarot(reading_json, query=args.query)
+        if llm_text is None:
+            console.print(f"[dim]No API key available — showing native interpretation.[/dim]" if HAS_RICH else "No API key — native interpretation only.")
+    _show_reading(console, reading, "reading", llm_text=llm_text)
     return 0
 
 
@@ -2452,6 +2691,8 @@ def _run_history_command(args: argparse.Namespace) -> int:
 
 
 def _run_combined_command(args: argparse.Namespace) -> int:
+    from .astrology import fetch_current_sky
+    from .interpreter import interpret_combined
     from .systems.iching.engine import cast_consultation, consultation_to_json, save_consultation
 
     prefs = _load_prefs()
@@ -2464,11 +2705,18 @@ def _run_combined_command(args: argparse.Namespace) -> int:
     if not args.no_save:
         _save_reading(reading)
         save_consultation(consultation)
+    tarot_json = _reading_to_json(reading)
+    iching_json = consultation_to_json(consultation)
+
+    with_astrology = getattr(args, "with_astrology", False)
+    sky_text: str | None = fetch_current_sky() if with_astrology else None
+
     payload = {
         "system": "combined",
         "query": args.query,
-        "tarot": _reading_to_json(reading),
-        "iching": consultation_to_json(consultation),
+        "tarot": tarot_json,
+        "iching": iching_json,
+        "current_sky": sky_text,
         "saved": not args.no_save,
         "saved_to": None
         if args.no_save
@@ -2480,13 +2728,121 @@ def _run_combined_command(args: argparse.Namespace) -> int:
     if args.json:
         return _emit_json(payload)
     console = Console(highlight=False, force_terminal=True) if HAS_RICH else Console()
+
+    if sky_text:
+        if HAS_RICH:
+            console.print(
+                Panel(
+                    Text(sky_text, style=STONE),
+                    title="Current Sky",
+                    border_style=AMBER,
+                    box=box.ASCII,
+                    padding=(1, 2),
+                )
+            )
+        else:
+            console.print("Current Sky")
+            console.print(sky_text)
+            console.print("")
+
+    interpret = getattr(args, "interpret", False)
+    llm_text: str | None = None
+    if interpret:
+        console.print(f"[{AMBER}]Generating deep interpretation…[/]" if HAS_RICH else "Generating deep interpretation...")
+        llm_text = interpret_combined(tarot_json, iching_json, astro_text=sky_text, query=args.query)
+        if llm_text is None:
+            console.print("[dim]No API key available — native interpretation only.[/dim]" if HAS_RICH else "No API key — native interpretation only.")
     _show_combined_reading(
         console,
         args.query,
         reading,
         consultation,
         tarot_show_tips=bool(prefs.get("show_tips", True)),
+        llm_text=llm_text,
     )
+    return 0
+
+
+def _run_profile_command(args: argparse.Namespace) -> int:
+    from .astrology import (
+        delete_profile,
+        list_profiles,
+        load_personal_profile,
+        load_profile,
+        save_profile,
+        set_active_profile,
+        show_profile,
+    )
+
+    console = Console(highlight=False, force_terminal=True) if HAS_RICH else Console()
+    sub = getattr(args, "profile_command", None)
+
+    if sub == "list":
+        profiles = list_profiles()
+        if not profiles:
+            console.print("No saved profiles. Use 'augury profile save <name>' to create one.")
+        else:
+            for name in profiles:
+                console.print(f"  {name}")
+        return 0
+
+    if sub == "show":
+        try:
+            text = show_profile(args.name)
+            console.print(text)
+        except FileNotFoundError as exc:
+            console.print(str(exc))
+            return 1
+        return 0
+
+    if sub == "set":
+        name = args.name
+        if name.lower() == "personal":
+            set_active_profile(None)
+            console.print("Active profile reset to personal.")
+        else:
+            try:
+                load_profile(name)
+            except FileNotFoundError:
+                console.print(f"Profile '{name}' not found. Use 'augury profile list' to see available profiles.")
+                return 1
+            set_active_profile(name)
+            console.print(f"Active profile set to '{name}'.")
+        return 0
+
+    if sub == "save":
+        name = args.name
+        if getattr(args, "from_personal", False):
+            personal = load_personal_profile()
+            if not personal:
+                console.print("No personal profile found at ~/.hermes/astrolog/profile.json")
+                return 1
+            data = dict(personal)
+            data["name"] = name
+        else:
+            # Scaffold a blank profile
+            data = {
+                "name": name,
+                "birth": {"date": "", "time": "", "timezone": ""},
+                "location": {"place": "", "latitude": 0.0, "longitude": 0.0},
+                "notes": "",
+            }
+        path = save_profile(name, data)
+        console.print(f"Profile saved to {path}")
+        console.print("Edit the file to fill in birth date, time, and location.")
+        return 0
+
+    if sub == "delete":
+        try:
+            delete_profile(args.name)
+            console.print(f"Profile '{args.name}' deleted.")
+        except FileNotFoundError as exc:
+            console.print(str(exc))
+            return 1
+        return 0
+
+    # No subcommand — show help
+    console.print("Usage: augury profile <list|show|set|save|delete>")
     return 0
 
 
@@ -2514,8 +2870,12 @@ def _build_parser() -> argparse.ArgumentParser:
     read_parser.add_argument("--spread", default=None, help="Spread name or slug")
     read_parser.add_argument("--query", default=None, help="Question or reading prompt")
     read_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
-    read_parser.add_argument("--interpret", action="store_true", help="LLM narrative mode stub")
+    read_parser.add_argument("--interpret", action="store_true", help="Generate LLM deep interpretation")
+    read_parser.add_argument("--with-astrology", action="store_true", help="Include current sky from astrolog")
+    read_parser.add_argument("--profile", default=None, help="Use a named client/mirror profile")
+    read_parser.add_argument("--mirror", default=None, help="Alias for --profile")
     read_parser.add_argument("--no-save", action="store_true", help="Do not persist the reading to history")
+    read_parser.add_argument("--manual", default=None, metavar="CARDS", help="Manual reading: comma-separated card names (e.g. 'Two of Swords, Two of Pentacles, Page of Cups'). Append 'rx' for reversed.")
 
     daily_parser = subparsers.add_parser("daily", help="Draw the daily card")
     daily_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
@@ -2542,6 +2902,10 @@ def _build_parser() -> argparse.ArgumentParser:
     combined_parser.add_argument("--spread", default=None, help="Tarot spread name or slug")
     combined_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
     combined_parser.add_argument("--no-save", action="store_true", help="Do not persist either reading")
+    combined_parser.add_argument("--interpret", action="store_true", help="Generate LLM deep interpretation")
+    combined_parser.add_argument("--with-astrology", action="store_true", help="Include current sky from astrolog")
+    combined_parser.add_argument("--profile", default=None, help="Use a named client/mirror profile")
+    combined_parser.add_argument("--mirror", default=None, help="Alias for --profile")
     combined_parser.set_defaults(allow_reversals=None)
     combined_reversal_group = combined_parser.add_mutually_exclusive_group()
     combined_reversal_group.add_argument(
@@ -2596,8 +2960,106 @@ def _build_parser() -> argparse.ArgumentParser:
     tarot_history_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
     tarot_history_parser.add_argument("--limit", type=int, default=25, help="Number of readings to show")
 
+    profile_parser = subparsers.add_parser("profile", help="Manage client/mirror astrological profiles")
+    profile_subparsers = profile_parser.add_subparsers(dest="profile_command")
+    profile_subparsers.add_parser("list", help="List all saved profiles")
+    profile_save_parser = profile_subparsers.add_parser("save", help="Save current active profile under a name")
+    profile_save_parser.add_argument("name", help="Profile name")
+    profile_save_parser.add_argument("--from-personal", action="store_true", help="Copy personal profile as starting point")
+    profile_set_parser = profile_subparsers.add_parser("set", help="Set active profile (used for readings)")
+    profile_set_parser.add_argument("name", help="Profile name (or 'personal' to revert)")
+    profile_show_parser = profile_subparsers.add_parser("show", help="Show profile details")
+    profile_show_parser.add_argument("name", nargs="?", default=None, help="Profile name (omit for personal)")
+    profile_delete_parser = profile_subparsers.add_parser("delete", help="Delete a named profile")
+    profile_delete_parser.add_argument("name", help="Profile name")
+
     iching_cli.add_augury_subparser(subparsers)
+
+    render_parser = subparsers.add_parser(
+    "render",
+    help="Render a markdown reading into styled PNG/PDF (oracle-render)",
+    )
+    render_parser.add_argument("input", nargs="?", default=None, help="Path to markdown file (omit with --font to list fonts)")
+    render_parser.add_argument("-o", "--output-dir", default=None, help="Output directory (default: <input-dir>/render.out)")
+    render_parser.add_argument("--single", action="store_true", help="Long PNG + PDF")
+    render_parser.add_argument("--stories", action="store_true", help="1080x1920 story slides")
+    render_parser.add_argument("--posts", action="store_true", help="1080x1080 post slides")
+    render_parser.add_argument("--all", action="store_true", help="All formats")
+    render_parser.add_argument("--base-name", default=None, help="Base filename for output")
+    render_parser.add_argument(
+    "--font",
+    default=DEFAULT_ORACLE_RENDER_FONT,
+    help=(
+    "Font profile for rendered text "
+    "(default: arial; options: arial, loveletter-typewriter, naughty-ones, "
+    "pixelfy-sans, pokemon-gb, press-start-2p, dotmatrix-varduo, vt323)"
+    ),
+    )
+    render_parser.add_argument("--count", type=int, default=None, metavar="N",
+    help="Exact number of story/post slides (redistributes content)")
+    render_parser.add_argument("--max-count", type=int, default=None, metavar="N",
+    help="Maximum number of story/post slides (merges if exceeded)")
+    render_parser.add_argument("--by-section", action="store_true",
+    help="Split by headings and render each section independently")
+    render_parser.add_argument("--section-level", type=int, default=2, metavar="N",
+    help="Heading level to split on for --by-section (default: 2)")
+
     return parser
+
+
+def _run_render_command(args) -> int:
+    import subprocess
+
+    # No input file + --font: list fonts
+    if getattr(args, "input", None) is None:
+        cmd = [sys.executable, "-m", "augury.oracle_render", "--font", getattr(args, "font", DEFAULT_ORACLE_RENDER_FONT)]
+        return subprocess.run(cmd, env=os.environ.copy()).returncode
+
+    input_path = Path(args.input).expanduser().resolve()
+    if not input_path.exists():
+        print(f"Input file not found: {input_path}", file=sys.stderr)
+        return 1
+    output_dir = (
+        Path(args.output_dir).expanduser().resolve()
+        if args.output_dir
+        else input_path.parent / "render.out"
+    )
+    local_renderer = Path(__file__).with_name("oracle_render.py")
+    if local_renderer.exists():
+        cmd = [sys.executable, "-m", "augury.oracle_render", str(input_path), "-o", str(output_dir)]
+    else:
+        import shutil
+
+        oracle_render = shutil.which("oracle-render") or str(Path.home() / ".hermes" / "bin" / "oracle-render")
+        if not Path(oracle_render).exists():
+            print(
+                "oracle-render not found. Expected augury.oracle_render, ~/.hermes/bin/oracle-render, or PATH.",
+                file=sys.stderr,
+            )
+            return 1
+        cmd = [oracle_render, str(input_path), "-o", str(output_dir)]
+    if getattr(args, "all", False):
+        cmd.append("--all")
+    else:
+        if getattr(args, "single", False):
+            cmd.append("--single")
+        if getattr(args, "stories", False):
+            cmd.append("--stories")
+        if getattr(args, "posts", False):
+            cmd.append("--posts")
+    if args.base_name:
+        cmd += ["--base-name", args.base_name]
+    if getattr(args, "font", None):
+        cmd += ["--font", args.font]
+    if getattr(args, "count", None) is not None:
+        cmd += ["--count", str(args.count)]
+    if getattr(args, "max_count", None) is not None:
+        cmd += ["--max-count", str(args.max_count)]
+    if getattr(args, "by_section", False):
+        cmd.append("--by-section")
+    if getattr(args, "section_level", None) is not None and args.section_level != 2:
+        cmd += ["--section-level", str(args.section_level)]
+    return subprocess.run(cmd, env=os.environ.copy()).returncode
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -2619,6 +3081,10 @@ def main(argv: list[str] | None = None) -> int:
         return _run_configure_command(args)
     if args.command == "paths":
         return _run_paths_command(args)
+    if args.command == "profile":
+        return _run_profile_command(args)
+    if args.command == "render":
+        return _run_render_command(args)
     if args.command == "tarot":
         if args.tarot_command == "read":
             return _run_read_command(args)
