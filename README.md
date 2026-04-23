@@ -281,6 +281,7 @@ PYTHONPATH=src python -m augury
 
 ## TODO
 
+- **`--manual` spread inference:** When `--spread` is not specified with `--manual`, the system defaults to `three-card`. This is fine for the common case but silently errors if you pass a different number of cards without specifying the spread. Quick fix: require `--spread` when using `--manual`. Real fix: if card count matches exactly one built-in spread, infer it; if it matches multiple (e.g., two different 5-card spreads), require `--spread` explicitly and print the candidates.
 - Replace the current `--interpret` stub with a real optional narrative/LLM mode
 - Expand export/import support for readings and custom spreads
 - Add data migration tooling from older private/local layouts
