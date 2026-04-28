@@ -1360,7 +1360,9 @@ def measure_total_height(blocks: Sequence[RenderBlock], spec: CanvasSpec, fonts:
     return y + spec.bottom_margin
 
 
-def render_single(blocks: Sequence[RenderBlock], out_base: Path, font_name: str) -> Tuple[Path, Path]:
+def render_single(
+    blocks: Sequence[RenderBlock], out_base: Path, font_name: str, pdf: bool = True
+) -> Tuple[Path, Optional[Path]]:
     spec = make_spec("single")
     fonts = make_fonts(spec, font_name)
     height = measure_total_height(blocks, spec, fonts)
@@ -1375,9 +1377,11 @@ def render_single(blocks: Sequence[RenderBlock], out_base: Path, font_name: str)
 
     png_path = out_base.with_suffix(".png")
     img.save(png_path, "PNG", dpi=PNG_DPI)
-    pdf_path = out_base.with_suffix(".pdf")
-    save_long_image_as_pdf(img, pdf_path)
-    return png_path, pdf_path
+    if pdf:
+        pdf_path = out_base.with_suffix(".pdf")
+        save_long_image_as_pdf(img, pdf_path)
+        return png_path, pdf_path
+    return png_path, None
 
 
 def save_long_image_as_pdf(img: Image.Image, pdf_path: Path, page_height_px: int = 2200) -> None:
@@ -1544,9 +1548,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
                    help="Prepend a standalone cover slide (title + subtitle from doc header)")
     p.add_argument("--by-section", action="store_true",
                    help="Split by headings and render each section independently")
-    p.add_argument("--section-level", default="2", metavar="N|auto",
-                   help="Heading level to split on for --by-section (default: 2). "
-                        "Use 'auto' to detect from document structure.")
+    p.add_argument("--section-level", default="auto", metavar="N|auto",
+                   help="Heading level to split on for --by-section (default: auto). "
+                        "Auto detects the highest heading level that appears more than once.")
+    p.add_argument("--no-pdf", action="store_true",
+                   help="Skip PDF output for --single renders (PNG only)")
     p.add_argument("--stdout-summary", action="store_true", help="Print generated file paths one per line")
     p.add_argument("--preview", action="store_true",
                    help="Dry run: print pagination stats (slide counts per section) without rendering")
@@ -2146,6 +2152,7 @@ def _render_section(
     exact_count: Optional[int],
     max_count: Optional[int],
     doc_title: str = "",
+    pdf: bool = True,
 ) -> List[Path]:
     """Render a single section's blocks in the requested formats."""
     section_slug = _slug_from_title(section_title)
@@ -2154,8 +2161,8 @@ def _render_section(
 
     if do_single:
         single_base = output_dir / f"{section_base}-single"
-        png_path, pdf_path = render_single(section_blocks, single_base, font_name)
-        generated.extend([png_path, pdf_path])
+        png_path, pdf_path = render_single(section_blocks, single_base, font_name, pdf=pdf)
+        generated.extend(p for p in [png_path, pdf_path] if p is not None)
 
     if do_stories:
         story_dir = output_dir / f"{section_base}-stories"
@@ -2200,9 +2207,13 @@ def _print_preview(
         natural = paginate_blocks(render_blocks, mode, font_name)
         effective = natural
         if exact_count:
-            effective = budget_paginate(render_blocks, mode, font_name, exact_count, is_max=False)
+            effective, _ = count_paginate_preserving_content(
+                render_blocks, mode, font_name, exact_count, is_max=False,
+            )
         elif max_count:
-            effective = budget_paginate(render_blocks, mode, font_name, max_count, is_max=True)
+            effective, _ = count_paginate_preserving_content(
+                render_blocks, mode, font_name, max_count, is_max=True,
+            )
         print(f"  {'full document':<52} {len(natural):>3} natural slide(s)")
         if exact_count or max_count:
             label = f"--count {exact_count}" if exact_count else f"--max-count {max_count}"
@@ -2241,7 +2252,13 @@ def make_cover_blocks(raw_blocks: List[RawBlock]) -> List[RenderBlock]:
 
 
 def _detect_section_level(raw_blocks: List[RawBlock]) -> int:
-    """Detect the most useful heading level for --by-section."""
+    """Detect the most useful heading level for --by-section.
+
+    Returns the HIGHEST heading level (lowest number) that appears more than
+    once — that is, the level where the document's major sections live.
+    For a document with H1 PART headings (e.g. PART 1 … PART 6), this returns 1.
+    For a typical reading post with H1 title + H2 sections, this returns 2.
+    """
     from collections import Counter
 
     level_counts = Counter()
@@ -2249,9 +2266,10 @@ def _detect_section_level(raw_blocks: List[RawBlock]) -> int:
         if block.kind == "heading":
             level_counts[block.level] += 1
 
-    for level in (2, 1, 3):
-        if level_counts.get(level, 0) > 1:
-            return level
+    # Prefer the minimum heading level (highest in hierarchy) that occurs > 1 time
+    candidates = sorted(lvl for lvl, cnt in level_counts.items() if cnt > 1)
+    if candidates:
+        return candidates[0]
     if level_counts:
         return min(level_counts.keys())
     return 2
@@ -2359,13 +2377,14 @@ def main(argv=None) -> int:
         for section_title, section_blocks in sections:
             generated.extend(_render_section(
                 section_title, section_blocks, base_name, font_name, output_dir,
-                do_single, do_stories, do_posts, exact_count, max_count, doc_title=doc_title,
+                do_single, do_stories, do_posts, exact_count, max_count,
+                doc_title=doc_title, pdf=not args.no_pdf,
             ))
     else:
         if do_single:
             single_base = output_dir / f"{base_name}-single"
-            png_path, pdf_path = render_single(render_blocks, single_base, font_name)
-            generated.extend([png_path, pdf_path])
+            png_path, pdf_path = render_single(render_blocks, single_base, font_name, pdf=not args.no_pdf)
+            generated.extend(p for p in [png_path, pdf_path] if p is not None)
 
         if do_stories:
             story_dir = output_dir / f"{base_name}-stories"
