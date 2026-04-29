@@ -1552,7 +1552,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
                    help="Heading level to split on for --by-section (default: auto). "
                         "Auto detects the highest heading level that appears more than once.")
     p.add_argument("--no-pdf", action="store_true",
-                   help="Skip PDF output for --single renders (PNG only)")
+                   help="Skip PDF output (PNG only; applies to --single and --by-section)")
     p.add_argument("--stdout-summary", action="store_true", help="Print generated file paths one per line")
     p.add_argument("--preview", action="store_true",
                    help="Dry run: print pagination stats (slide counts per section) without rendering")
@@ -2375,6 +2375,11 @@ def main(argv=None) -> int:
         if not sections:
             raise SystemExit(f"No sections found at heading level {section_level}")
         for section_title, section_blocks in sections:
+            # Skip heading-only sections (doc title, chapter titles with no body)
+            # unless --cover is passed, in which case render them as title slides.
+            is_heading_only = all(b.kind == "heading" for b in section_blocks)
+            if is_heading_only and not args.cover:
+                continue
             generated.extend(_render_section(
                 section_title, section_blocks, base_name, font_name, output_dir,
                 do_single, do_stories, do_posts, exact_count, max_count,
