@@ -1551,8 +1551,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--section-level", default="auto", metavar="N|auto",
                    help="Heading level to split on for --by-section (default: auto). "
                         "Auto detects the highest heading level that appears more than once.")
-    p.add_argument("--no-pdf", action="store_true",
-                   help="Skip PDF output (PNG only; applies to --single and --by-section)")
+    p.add_argument("--pdf", action="store_true",
+                   help="Also generate PDF output (applies to --single and --by-section)")
     p.add_argument("--stdout-summary", action="store_true", help="Print generated file paths one per line")
     p.add_argument("--preview", action="store_true",
                    help="Dry run: print pagination stats (slide counts per section) without rendering")
@@ -2383,12 +2383,12 @@ def main(argv=None) -> int:
             generated.extend(_render_section(
                 section_title, section_blocks, base_name, font_name, output_dir,
                 do_single, do_stories, do_posts, exact_count, max_count,
-                doc_title=doc_title, pdf=not args.no_pdf,
+                doc_title=doc_title, pdf=args.pdf,
             ))
     else:
         if do_single:
             single_base = output_dir / f"{base_name}-single"
-            png_path, pdf_path = render_single(render_blocks, single_base, font_name, pdf=not args.no_pdf)
+            png_path, pdf_path = render_single(render_blocks, single_base, font_name, pdf=args.pdf)
             generated.extend(p for p in [png_path, pdf_path] if p is not None)
 
         if do_stories:
