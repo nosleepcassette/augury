@@ -2160,7 +2160,7 @@ def _render_section(
     generated: List[Path] = []
 
     if do_single:
-        single_base = output_dir / f"{section_base}-single"
+        single_base = output_dir / section_base
         png_path, pdf_path = render_single(section_blocks, single_base, font_name, pdf=pdf)
         generated.extend(p for p in [png_path, pdf_path] if p is not None)
 
@@ -2374,11 +2374,34 @@ def main(argv=None) -> int:
         sections = split_by_section(raw_blocks, section_level)
         if not sections:
             raise SystemExit(f"No sections found at heading level {section_level}")
-        for section_title, section_blocks in sections:
-            # Skip heading-only sections (doc title, chapter titles with no body)
-            # unless --cover is passed, in which case render them as title slides.
-            is_heading_only = all(b.kind == "heading" for b in section_blocks)
-            if is_heading_only and not args.cover:
+
+        # Detect a preamble: the first section is a preamble if it contains no
+        # heading at the detected section_level — meaning it's the bucket of
+        # content that preceded the first real section heading (doc title + metadata).
+        def _is_preamble(sec_blocks: List[RenderBlock]) -> bool:
+            return not any(
+                b.kind == "heading" and b.level == section_level for b in sec_blocks
+            )
+
+        sections_to_render = list(sections)
+        if sections_to_render and _is_preamble(sections_to_render[0][1]):
+            preamble_title, preamble_blocks = sections_to_render.pop(0)
+            if args.cover:
+                # Render preamble as a standalone cover section
+                generated.extend(_render_section(
+                    preamble_title, preamble_blocks, base_name, font_name, output_dir,
+                    do_single, do_stories, do_posts, exact_count, max_count,
+                    doc_title=doc_title, pdf=args.pdf,
+                ))
+            elif sections_to_render:
+                # Fold preamble blocks into the top of the first content section
+                first_title, first_blocks = sections_to_render[0]
+                sections_to_render[0] = (first_title, preamble_blocks + first_blocks)
+            # If cover=False and no sections follow, preamble is silently dropped.
+
+        for section_title, section_blocks in sections_to_render:
+            # Skip heading-only sections (chapter titles with no body content).
+            if all(b.kind == "heading" for b in section_blocks):
                 continue
             generated.extend(_render_section(
                 section_title, section_blocks, base_name, font_name, output_dir,
