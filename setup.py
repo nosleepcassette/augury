@@ -31,6 +31,7 @@ setup(
             "augury=augury.cli:main",
             "augury-discord=augury.discord:main",
             "iching=augury.iching:main",
+            "oracle-render=augury.oracle_render:main",
         ]
     },
     package_data={"augury.systems.iching": ["data/*.js"]},

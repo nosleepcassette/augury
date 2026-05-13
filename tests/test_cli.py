@@ -53,6 +53,21 @@ def _run_iching(*args: str, env: dict[str, str]) -> subprocess.CompletedProcess[
     )
 
 
+def _run_with_input(*args: str, input_text: str, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    merged_env = dict(os.environ)
+    merged_env.update(env)
+    merged_env["PYTHONPATH"] = PYTHONPATH
+    return subprocess.run(
+        [sys.executable, "-m", "augury", *args],
+        cwd=ROOT,
+        env=merged_env,
+        text=True,
+        input=input_text,
+        capture_output=True,
+        check=True,
+    )
+
+
 def test_read_json_no_save(tmp_path: Path) -> None:
     result = _run(
         "read",
@@ -86,6 +101,108 @@ def test_read_json_save_writes_history(tmp_path: Path) -> None:
     assert (tmp_path / "readings.jsonl").exists()
     assert payload["drawn_cards"][0]["art"].strip()
     assert payload["drawn_cards"][0]["card"]["art"].strip()
+
+
+def test_manual_read_json_uses_card_specs_without_saving(tmp_path: Path) -> None:
+    result = _run(
+        "read",
+        "--json",
+        "--manual",
+        "The Fool, The Magician rx, The High Priestess",
+        "--spread",
+        "three-card",
+        "--query",
+        "manual",
+        env={"AUGURY_HOME": str(tmp_path)},
+    )
+    payload = json.loads(result.stdout)
+    assert payload["saved"] is False
+    assert payload["saved_to"] is None
+    assert payload["spread_name"] == "Three Card"
+    assert payload["drawn_cards"][1]["name"] == "The Magician"
+    assert payload["drawn_cards"][1]["reversed"] is True
+    assert not (tmp_path / "readings.jsonl").exists()
+
+
+def test_manual_flag_prompts_for_cards_and_accepts_no_interpret(tmp_path: Path) -> None:
+    result = _run_with_input(
+        "read",
+        "--json",
+        "--manual",
+        "--spread",
+        "single",
+        "--interpret",
+        "none",
+        "--query",
+        "physical deck",
+        input_text="The Fool\n",
+        env={"AUGURY_HOME": str(tmp_path)},
+    )
+    payload = json.loads(result.stdout)
+    assert payload["saved"] is False
+    assert payload["drawn_cards"][0]["name"] == "The Fool"
+    assert payload["drawn_cards"][0]["position_name"] == "Card"
+
+
+def test_manual_year_ahead_spread_available(tmp_path: Path) -> None:
+    cards = ", ".join(
+        [
+            "The Fool",
+            "The Magician",
+            "The High Priestess",
+            "The Empress",
+            "The Emperor",
+            "The Hierophant",
+            "The Lovers",
+            "The Chariot",
+            "Strength",
+            "The Hermit",
+            "Wheel of Fortune",
+            "Justice",
+        ]
+    )
+    result = _run(
+        "read",
+        "--json",
+        "--manual",
+        cards,
+        "--spread",
+        "year-ahead",
+        "--interpret",
+        "none",
+        env={"AUGURY_HOME": str(tmp_path)},
+    )
+    payload = json.loads(result.stdout)
+    assert payload["saved"] is False
+    assert payload["spread_name"] == "Year Ahead"
+    assert len(payload["drawn_cards"]) == 12
+    assert payload["drawn_cards"][0]["position_name"] == "January"
+
+
+def test_manual_three_card_layout_variant(tmp_path: Path) -> None:
+    result = _run(
+        "read",
+        "--json",
+        "--manual",
+        "The Fool, Queen of Cups rx, King of Cups",
+        "--spread",
+        "three-card",
+        "--layout",
+        "situation-action-outcome",
+        "--interpret",
+        "none",
+        env={"AUGURY_HOME": str(tmp_path)},
+    )
+    payload = json.loads(result.stdout)
+    assert payload["saved"] is False
+    assert payload["spread_name"] == "Three Card - Situation / Action / Outcome"
+    assert [card["position_name"] for card in payload["drawn_cards"]] == [
+        "Situation",
+        "Action",
+        "Outcome",
+    ]
+    assert payload["drawn_cards"][1]["name"] == "Queen of Cups"
+    assert payload["drawn_cards"][1]["reversed"] is True
 
 
 def test_history_json_preserves_card_art(tmp_path: Path) -> None:

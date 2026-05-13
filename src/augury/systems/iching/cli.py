@@ -17,7 +17,7 @@ from ...config import (
     load_preferences,
     save_preferences,
 )
-from ...shell import Console, HAS_RICH
+from ...shell import AMBER, Console, HAS_RICH, STONE
 from .app import IChingApp, show_consultation, show_hexagram_detail
 from .data import hexagram_to_json, lookup_hexagram
 from .engine import (
@@ -139,6 +139,8 @@ def _parse_date(value: str | None) -> date | None:
 
 
 def _run_cast_command(args: argparse.Namespace) -> int:
+    from augury.interpreter import interpret_iching
+
     consultation = cast_consultation(query=args.query)
     if not args.no_save:
         save_consultation(consultation)
@@ -149,6 +151,38 @@ def _run_cast_command(args: argparse.Namespace) -> int:
         return _emit_json(payload)
     console = Console(highlight=False, force_terminal=True) if HAS_RICH else Console()
     show_consultation(console, consultation)
+    interpret = getattr(args, "interpret", False)
+    if interpret:
+        if HAS_RICH:
+            from rich.text import Text
+            from rich.panel import Panel
+            import rich.box as box
+            console.print(f"[{AMBER}]Generating deep interpretation…[/]")
+        else:
+            console.print("Generating deep interpretation...")
+        llm_text = interpret_iching(payload, query=args.query)
+        if llm_text:
+            if HAS_RICH:
+                console.print(
+                    Panel(
+                        Text(llm_text, style=STONE),
+                        title="Deep Interpretation",
+                        border_style=AMBER,
+                        box=box.ASCII,
+                        padding=(1, 2),
+                    )
+                )
+            else:
+                console.print("\nDeep Interpretation\n")
+                console.print(llm_text)
+        else:
+            console.print("No API key available — native interpretation only." if not HAS_RICH else f"[dim]No API key available — native interpretation only.[/dim]")
+        console.print("")
+        console.print("[dim]enter to return[/dim]" if HAS_RICH else "enter to return")
+        try:
+            console.input("")
+        except (EOFError, KeyboardInterrupt):
+            pass
     return 0
 
 
@@ -192,6 +226,7 @@ def _add_command_parsers(subparsers: Any, *, nested: bool = False) -> None:
     cast_parser.add_argument("--query", default=None, help="Optional consultation prompt")
     cast_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
     cast_parser.add_argument("--no-save", action="store_true", help="Do not persist the consultation")
+    cast_parser.add_argument("--interpret", action="store_true", help="Generate LLM deep interpretation")
 
     daily_parser = subparsers.add_parser("daily", help="Draw the deterministic daily hexagram")
     daily_parser.add_argument("--date", default=None, help="Override the date in YYYY-MM-DD format")

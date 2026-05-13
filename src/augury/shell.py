@@ -9,7 +9,7 @@ import sys
 import termios
 import time
 import tty
-from typing import Any
+from typing import Any, Callable
 
 try:
     from rich import box
@@ -119,17 +119,63 @@ STONE = "#cbb489"
 INK = "#241707"
 PENDING_ESCAPE = False
 PENDING_ESCAPE_PREFIX = ""
+FRAME_CAPTURE_ACTIVE = False
 
 
 def strip_markup(text: str) -> str:
     return re.sub(r"\[/?[^\]]+\]", "", str(text)).replace(r"\[", "[").replace(r"\]", "]")
 
 
+def _terminal_writer(console: Console) -> Any:
+    return getattr(console, "file", sys.stdout)
+
+
+def _ansi_clear(writer: Any) -> None:
+    writer.write("\x1b[2J\x1b[H")
+    writer.flush()
+
+
+def _paint_frame(writer: Any, frame: str) -> None:
+    lines = frame.splitlines(keepends=True)
+    payload = ["\x1b[H"]
+    for line in lines:
+        payload.append("\x1b[2K")
+        payload.append(line)
+    if frame and not frame.endswith(("\n", "\r")):
+        payload.append("\x1b[2K")
+    payload.append("\x1b[J")
+    writer.write("".join(payload))
+    writer.flush()
+
+
 def clear_screen(console: Console) -> None:
+    if FRAME_CAPTURE_ACTIVE:
+        return
+    writer = _terminal_writer(console)
+    if hasattr(writer, "isatty") and writer.isatty():
+        _ansi_clear(writer)
+        return
     if HAS_RICH:
         console.clear()
-    else:
-        os.system("clear")
+        return
+    os.system("clear")
+
+
+def render_frame(console: Console, render_fn: Callable[[], None]) -> None:
+    writer = _terminal_writer(console)
+    if not (HAS_RICH and hasattr(console, "capture") and hasattr(writer, "isatty") and writer.isatty()):
+        clear_screen(console)
+        render_fn()
+        return
+    global FRAME_CAPTURE_ACTIVE
+    FRAME_CAPTURE_ACTIVE = True
+    try:
+        with console.capture() as capture:
+            render_fn()
+        frame = capture.get()
+    finally:
+        FRAME_CAPTURE_ACTIVE = False
+    _paint_frame(writer, frame)
 
 
 def centered(console: Console, markup: str, plain_text: str | None = None) -> str:
@@ -147,8 +193,9 @@ def logo_banner(
     subtitle: str = "",
 ) -> str:
     lines: list[str] = []
+    logo_width = max((len(line) for line in logo_lines), default=0)
     for line in logo_lines:
-        lines.append(centered(console, f"[bold {AMBER}]{line}[/]", line))
+        lines.append(centered(console, f"[bold {AMBER}]{line}[/]", line.ljust(logo_width)))
     lines.append("")
     for index, tagline in enumerate(taglines):
         color = AMBER_SOFT if index == 0 else STONE if index == 1 else AMBER_DIM

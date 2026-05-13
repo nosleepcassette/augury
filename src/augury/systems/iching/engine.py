@@ -138,40 +138,156 @@ def _first_sentence(text: str) -> str:
     return cleaned[: match.start()].strip()
 
 
+_TRIGRAM_MEANINGS: dict[str, str] = {
+    "Heaven": "the Creative — pure yang, strength, sky, the father principle",
+    "Earth": "the Receptive — pure yin, yielding, vast and open, the mother principle",
+    "Thunder": "the Arousing — shock and sudden movement, the eldest son, spring energy",
+    "Water": "the Abysmal — danger, depth, the coursing stream, the middle son",
+    "Mountain": "Keeping Still — rest, the boundary, the youngest son",
+    "Wind": "the Gentle — penetrating persistence, wood, the eldest daughter",
+    "Fire": "the Clinging — clarity and illumination, the sun, the middle daughter",
+    "Lake": "the Joyous — openness, joy, the mouth, the youngest daughter",
+}
+
+
+def _excerpt(text: str, sentences: int = 2) -> str:
+    """Return the first N sentences from a block of Wilhelm commentary."""
+    cleaned = " ".join(str(text).split())
+    if not cleaned:
+        return ""
+    parts = re.split(r"(?<=[.!?])\s+", cleaned)
+    return " ".join(parts[:sentences]).strip()
+
+
+def _trigram_sentence(hexagram: "Hexagram") -> str:
+    lower = hexagram.lower_trigram
+    upper = hexagram.upper_trigram
+    lower_meaning = _TRIGRAM_MEANINGS.get(lower, lower)
+    upper_meaning = _TRIGRAM_MEANINGS.get(upper, upper)
+    if lower == upper:
+        return (
+            f"Both trigrams are {lower} ({lower_meaning}). "
+            f"The doubling intensifies this quality — it fills the entire structure of the hexagram."
+        )
+    return (
+        f"The lower trigram is {lower} ({lower_meaning}); "
+        f"the upper trigram is {upper} ({upper_meaning}). "
+        f"What arises from below meets what governs from above."
+    )
+
+
+def _iching_synthesis(consultation: "Consultation") -> str:
+    primary = consultation.primary_hexagram
+    parts: list[str] = []
+    if not consultation.changing_lines:
+        parts.append(
+            f"Hexagram {primary.number} stands still and complete. "
+            "This is not a moment of transition but of being squarely inside a condition — "
+            "the oracle is asking you to understand it fully before moving."
+        )
+    elif len(consultation.changing_lines) == 6:
+        parts.append(
+            "All six lines are in motion. A total transformation is underway — "
+            "the situation described by the primary hexagram is already giving way entirely "
+            "to what the relating hexagram holds."
+        )
+    elif len(consultation.changing_lines) == 1:
+        line_num = consultation.changing_lines[0]
+        parts.append(
+            f"A single changing line at position {line_num} carries the sharpest practical instruction. "
+            "The rest of the hexagram provides the context; that line provides the specific message."
+        )
+    else:
+        count = len(consultation.changing_lines)
+        parts.append(
+            f"{count} lines in motion describe an active transition. "
+            "The overall direction is more important here than any single line — "
+            "read the relating hexagram as the destination, not just a footnote."
+        )
+    if primary.keywords:
+        kw = ", ".join(primary.keywords[:3])
+        parts.append(f"The essential qualities of this hexagram: {kw}.")
+    return " ".join(parts).strip()
+
+
 def interpret_consultation(consultation: Consultation) -> str:
     primary = consultation.primary_hexagram
     parts: list[str] = []
+
+    symbol = primary.unicode_symbol or ""
+    hex_name = f"Hexagram {primary.number}, {primary.name}"
+    if primary.chinese_name and primary.pinyin:
+        hex_name += f" ({primary.chinese_name} / {primary.pinyin})"
+    symbol_str = f" {symbol}" if symbol else ""
+
     if consultation.query:
         parts.append(
-            f'You asked "{consultation.query}". The cast yields Hexagram {primary.number}, {primary.name}.'
+            f'You brought the question: "{consultation.query}". '
+            f"The cast yields {hex_name}{symbol_str}."
         )
     else:
-        parts.append(f"The cast yields Hexagram {primary.number}, {primary.name}.")
+        parts.append(f"The cast yields {hex_name}{symbol_str}.")
 
-    parts.append(primary.judgment_text)
-    parts.append(primary.image_text)
+    if primary.symbolic:
+        symbolic_excerpt = _excerpt(primary.symbolic, sentences=3)
+        if symbolic_excerpt:
+            parts.append(symbolic_excerpt)
+
+    if primary.judgment_text:
+        judgment_body = primary.judgment_text.strip()
+        judgment_comment = _excerpt(primary.judgment_comments, sentences=2)
+        if judgment_comment:
+            parts.append(f"The Judgment reads: {judgment_body}\n{judgment_comment}")
+        else:
+            parts.append(f"The Judgment reads: {judgment_body}")
+
+    if primary.image_text:
+        image_body = " ".join(primary.image_text.split())
+        image_comment = _excerpt(primary.image_comments, sentences=2)
+        if image_comment:
+            parts.append(f"The Image: {image_body}\n{image_comment}")
+        else:
+            parts.append(f"The Image: {image_body}")
+
+    trigram_s = _trigram_sentence(primary)
+    if trigram_s:
+        parts.append(trigram_s)
 
     if consultation.changing_lines:
-        line_numbers = ", ".join(str(number) for number in consultation.changing_lines)
+        line_numbers_str = ", ".join(str(n) for n in consultation.changing_lines)
         parts.append(
-            f"Changing lines appear at {line_numbers}, so the answer is in motion rather than fixed."
+            f"Changing lines appear at position{'s' if len(consultation.changing_lines) > 1 else ''} "
+            f"{line_numbers_str}. The answer is in motion — this is not a static condition."
         )
         for number in consultation.changing_lines:
-            line_text = primary.line_texts[number - 1]
-            comment = _first_sentence(primary.line_comments[number - 1])
-            if comment:
-                parts.append(f"Line {number}: {line_text} {comment}")
-            else:
-                parts.append(f"Line {number}: {line_text}")
+            line_text = primary.line_texts[number - 1].strip()
+            line_comment = _excerpt(primary.line_comments[number - 1], sentences=3)
+            entry = f"Line {number}: {line_text}"
+            if line_comment:
+                entry += f"\n{line_comment}"
+            parts.append(entry)
+
         if consultation.relating_hexagram is not None:
             relating = consultation.relating_hexagram
+            relating_symbol = relating.unicode_symbol or ""
+            rel_name = f"Hexagram {relating.number}, {relating.name}"
+            if relating.chinese_name and relating.pinyin:
+                rel_name += f" ({relating.chinese_name} / {relating.pinyin})"
             parts.append(
-                f"This movement tends toward Hexagram {relating.number}, {relating.name}: {relating.judgment_text}"
+                f"This movement tends toward {rel_name}{' ' + relating_symbol if relating_symbol else ''}.\n"
+                f"{relating.judgment_text}\n"
+                + _excerpt(relating.judgment_comments, sentences=2)
             )
     else:
         parts.append(
-            "No lines are changing, so the primary hexagram stands as the whole answer rather than shifting into a second condition."
+            "No lines are changing. The primary hexagram stands as the complete answer — "
+            "a stable condition to be understood and worked with rather than a transition to be navigated. "
+            "Spend time with the Judgment and the Image before looking for movement."
         )
+
+    synthesis = _iching_synthesis(consultation)
+    if synthesis:
+        parts.append(synthesis)
 
     return "\n\n".join(part.strip() for part in parts if part.strip())
 

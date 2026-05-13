@@ -1070,6 +1070,69 @@ def _save_reading(reading: Any) -> None:
         handle.write("\n")
 
 
+def _slug(text: str, max_words: int = 5) -> str:
+    """Slugify text: lowercase, drop punctuation, hyphen-join first N words."""
+    import re as _re
+    words = _re.sub(r"[^a-z0-9\s]", "", text.lower()).split()
+    return "-".join(words[:max_words])
+
+
+def _save_reading_to_readings_dir(reading: Any, llm_text: str | None = None) -> None:
+    """Save a reading as a dated markdown file to ~/readings/clients/maps/."""
+    try:
+        from datetime import date
+
+        spread_name = getattr(reading, "spread_name", None) or "reading"
+        query = getattr(reading, "query", None) or ""
+        ts = getattr(reading, "timestamp", None)
+        date_str = ts.strftime("%Y-%m-%d") if ts else date.today().isoformat()
+        time_str = ts.strftime("%H%M") if ts else ""
+
+        spread_slug = _slug(spread_name, 2)
+        if query:
+            query_slug = _slug(query, 4)
+            filename = f"{date_str}_{spread_slug}_{query_slug}.md"
+        else:
+            filename = f"{date_str}_{spread_slug}_{time_str}.md"
+
+        dest = Path.home() / "readings" / "clients" / "maps" / filename
+        dest.parent.mkdir(parents=True, exist_ok=True)
+
+        # human-readable title
+        if query:
+            title = f"{spread_name}: {query}"
+        else:
+            nice_date = ts.strftime("%-d %B %Y") if ts else date_str
+            title = f"{spread_name} — {nice_date}"
+
+        time_display = ts.strftime("%Y-%m-%d %H:%M") if ts else date_str
+
+        lines: list[str] = [
+            f"# {title}",
+            f"*{time_display}*",
+            "",
+            "## Cards",
+            "",
+        ]
+
+        drawn = getattr(reading, "drawn_cards", []) or []
+        for dc in drawn:
+            card = getattr(dc, "card", dc)
+            name = getattr(card, "name", None) or (card.get("name") if isinstance(card, dict) else "Unknown")
+            position = getattr(dc, "position_name", "")
+            rev = getattr(dc, "reversed", False)
+            orientation = " (rx)" if rev else ""
+            lines.append(f"- **{position}**: {name}{orientation}")
+
+        interpretation = llm_text or getattr(reading, "interpretation", "") or ""
+        if interpretation:
+            lines += ["", "## Interpretation", "", interpretation]
+
+        dest.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    except Exception:
+        pass  # never let file-save crash the reading
+
+
 def _load_readings() -> list[Any]:
     if engine_module is not None and hasattr(engine_module, "load_readings"):
         try:
@@ -2426,6 +2489,7 @@ class AuguryApp:
                 llm_text = f"{backend} interpretation failed: {exc}"
             if llm_text is None:
                 llm_text = f"{backend} interpretation unavailable: missing API key or backend configuration."
+        _save_reading_to_readings_dir(reading, llm_text=llm_text)
         _show_reading(self.console, reading, "manual reading", llm_text=llm_text)
 
     def new_reading(self) -> None:
@@ -2435,6 +2499,7 @@ class AuguryApp:
         query = self.prompt("query", "")
         reading = _draw_reading(spread, query or None, self.prefs)
         _save_reading(reading)
+        _save_reading_to_readings_dir(reading)
         _show_reading(self.console, reading, "new reading")
 
     def daily_card(self) -> None:
@@ -2442,6 +2507,7 @@ class AuguryApp:
         spread = _resolve_spread("single", self.custom_spread_defs)
         reading = _draw_reading(spread, query, self.prefs)
         _save_reading(reading)
+        _save_reading_to_readings_dir(reading)
         _show_reading(self.console, reading, "daily card")
 
     def card_browser(self) -> None:
@@ -2854,6 +2920,7 @@ class SystemChooserApp:
         reading = _draw_reading(spread, query, tarot_prefs)
         consultation = cast_consultation(query=query)
         _save_reading(reading)
+        _save_reading_to_readings_dir(reading)
         save_consultation(consultation)
         _show_combined_reading(
             self.console,

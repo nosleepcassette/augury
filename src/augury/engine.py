@@ -162,15 +162,15 @@ _BUILTIN_SPREADS = {
     },
     "relationship": {
         "name": "Relationship",
-        "positions": ["You", "Them", "The Connection", "Challenge", "Potential"],
+        "positions": ["You", "Other Person", "The Bond", "Strength", "Challenge", "Guidance"],
     },
     "career": {
         "name": "Career",
-        "positions": ["Current Path", "Obstacle", "Hidden Factor", "Action", "Outcome"],
+        "positions": ["Current Path", "Strength", "Obstacle", "Opportunity", "Guidance", "Outcome"],
     },
     "yes-no": {
         "name": "Yes/No",
-        "positions": ["Answer"],
+        "positions": ["Situation", "Obstacle", "Guidance"],
     },
     "elemental": {
         "name": "Elemental",
@@ -178,11 +178,42 @@ _BUILTIN_SPREADS = {
     },
     "horseshoe": {
         "name": "Horseshoe",
-        "positions": ["Past", "Present", "Hidden Influences", "Obstacles", "External Forces", "Advice", "Outcome"],
+        "positions": [
+            "Past influences",
+            "Present situation",
+            "Hidden influences",
+            "Obstacles",
+            "External influences",
+            "Best course of action",
+            "Likely outcome",
+        ],
     },
     "shadow-work": {
         "name": "Shadow Work",
-        "positions": ["The Pattern", "The Root", "What Is Hidden", "The Gift Within It", "The Path Forward"],
+        "positions": [
+            "The shadow aspect",
+            "Root cause",
+            "How it manifests",
+            "What to integrate",
+            "Next step",
+        ],
+    },
+    "year-ahead": {
+        "name": "Year Ahead",
+        "positions": [
+            "January",
+            "February",
+            "March",
+            "April",
+            "May",
+            "June",
+            "July",
+            "August",
+            "September",
+            "October",
+            "November",
+            "December",
+        ],
     },
     "star": {
         "name": "Star",
@@ -208,6 +239,7 @@ _POSITION_CONTEXTS = {
     "present": "This describes the energy active around you now.",
     "future": "This suggests where the pattern is heading if it continues.",
     "challenge": "This shows the tension, obstacle, or lesson pressing hardest.",
+    "situation": "This names the current field or problem the reading is addressing.",
     "above": "This reflects conscious hopes, ideals, or what you are aiming toward.",
     "below": "This reflects the root system under the situation: instinct, history, or the unconscious.",
     "advice": "This shows the clearest attitude or move to work with.",
@@ -215,9 +247,14 @@ _POSITION_CONTEXTS = {
     "hopes-fears": "This reveals what is desired and feared at the same time.",
     "outcome": "This shows the likely result if nothing fundamental changes.",
     "you": "This reflects your current stance, tone, or role in the dynamic.",
+    "other": "This reflects the other person's stance, tone, or role in the dynamic.",
+    "connection": "This describes the bond, pattern, or chemistry between the parties.",
     "them": "This reflects the other person's energy or position in the dynamic.",
     "the-connection": "This describes the bond, pattern, or chemistry between the parties.",
     "potential": "This shows what the situation could become with conscious effort.",
+    "mind": "This shows the thought pattern, story, or mental frame active in the question.",
+    "body": "This shows what is being carried physically, materially, or somatically.",
+    "spirit": "This points to meaning, alignment, and the deeper signal underneath the situation.",
     "current-path": "This shows the course you are presently walking.",
     "obstacle": "This reveals the resistance, delay, or practical snag in the way.",
     "hidden-factor": "This points to something important that is easy to miss.",
@@ -228,12 +265,22 @@ _POSITION_CONTEXTS = {
     "air-mind": "This position focuses on thought, perspective, and mental framing.",
     "earth-material": "This position focuses on the concrete, practical, and embodied side of the matter.",
     "hidden-influences": "This reveals forces at work beneath the surface that are shaping the situation.",
+    "past-influences": "This points to influences that have already shaped the situation.",
+    "present-situation": "This describes the energy active around you now.",
     "external-forces": "This shows the conditions, people, or energies coming from outside.",
+    "external-influences": "This shows the conditions, people, or energies coming from outside.",
+    "best-course-of-action": "This shows the clearest attitude or move to work with.",
+    "likely-outcome": "This shows the likely result if nothing fundamental changes.",
     "the-pattern": "This identifies the recurring dynamic or behavior that is calling for attention.",
     "the-root": "This points to the origin or deep cause underneath the pattern.",
     "what-is-hidden": "This surfaces what has been out of awareness or actively avoided.",
     "the-gift-within-it": "This reveals what strength, insight, or resource lives inside the difficulty.",
     "the-path-forward": "This shows the direction of integration and what becomes possible on the other side.",
+    "the-shadow-aspect": "This identifies the disowned or avoided part of the pattern asking to be seen.",
+    "root-cause": "This points to the deeper origin underneath the shadow pattern.",
+    "how-it-manifests": "This shows the visible behavior, pressure, or symptom produced by the hidden pattern.",
+    "what-to-integrate": "This names the strength, need, or truth that becomes workable when it is consciously included.",
+    "next-step": "This shows the most grounded movement toward integration.",
     "what-crosses-you": "This names the tension, friction, or opposing force working against the situation.",
     "what-crowns-you": "This reflects the highest potential or clearest possible outcome in view.",
     "foundation": "This points to the deeper ground the situation is rooted in.",
@@ -784,8 +831,11 @@ def _interpret_drawn_card(drawn: DrawnCard, names_in_reading: set[str] | None = 
     parts: list[str] = []
 
     # Position + card + orientation header
+    position_name = drawn.position_name
+    if position_name.casefold().startswith("the "):
+        position_name = position_name[4:]
     parts.append(
-        f"In the {drawn.position_name} position, {name} appears {orientation}. "
+        f"In the {position_name} position, {name} appears {orientation}. "
         f"{_position_context(drawn.position_name)}"
     )
 

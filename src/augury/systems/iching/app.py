@@ -24,6 +24,7 @@ from ...shell import (
     clear_screen,
     logo_banner,
     read_key,
+    render_frame,
     rich_escape,
     terminal_rows,
     window_bounds,
@@ -39,14 +40,15 @@ from .engine import (
 )
 
 LOGO_LINES = [
-    "8888888 .d8888b. 888    888 8888888 888b    888  .d8888b.",
-    "  888  d88P  Y88b888    888   888   8888b   888 d88P  Y88b",
-    "  888  888    888888    888   888   88888b  888 888    888",
-    "  888  888        888  888    888   888Y88b 888 888",
-    "  888  888        8888888     888   888 Y88b888 888  88888",
-    "  888  888    888 888  888    888   888  Y88888 888    888",
-    "  888  Y88b  d88P 888    888   888   888   Y8888 Y88b  d88P",
-    "8888888  Y8888P88 888    888 8888888 888    Y888  Y8888P88",
+    " o8o                 oooo         o8o",
+    " `\"'                 `888         `\"'",
+    "oooo        .ooooo.   888 .oo.   oooo  ooo. .oo.    .oooooooo",
+    "`888       d88' `\"Y8  888P\"Y88b  `888  `888P\"Y88b  888' `88b",
+    " 888       888        888   888   888   888   888  888   888",
+    " 888       888   .o8  888   888   888   888   888  `88bod8P'",
+    "o888o      `Y8bod8P' o888o o888o o888o o888o o888o `8oooooo.",
+    "                                                   d\"     YD",
+    "                                                   \"Y88888P'",
 ]
 TAGLINES = [
     "book of changes",
@@ -316,31 +318,33 @@ class IChingApp:
         self.refresh()
         consultations = load_consultations()
         subtitle = f"consultations {len(consultations)}  ·  hexagrams {len(all_hexagrams())}"
-        clear_screen(self.console)
-        self.console.print(logo_banner(self.console, logo_lines=LOGO_LINES, taglines=TAGLINES, subtitle=subtitle))
-        self.console.print("")
-        if HAS_RICH:
-            stats = Table.grid(padding=(0, 3))
-            stats.add_column(style=AMBER_SOFT)
-            stats.add_column(style=STONE)
-            stats.add_row("Casting Model", "Three coins with yarrow odds")
-            stats.add_row("Show Trigrams", "on" if self.prefs.get("show_trigrams", True) else "off")
-            stats.add_row("Show Line Text", "on" if self.prefs.get("show_line_text", True) else "off")
-            self.console.print(Align.center(Panel(stats, title="Current State", border_style=AMBER, box=box.ASCII, padding=(0, 2), expand=False)))
+        def _render() -> None:
+            self.console.print(logo_banner(self.console, logo_lines=LOGO_LINES, taglines=TAGLINES, subtitle=subtitle))
             self.console.print("")
-        label_width = max(len(item[1].replace("&", "")) for item in MENU_ITEMS)
-        for index, (_hotkey, label, _action) in enumerate(MENU_ITEMS):
-            styled, plain = _menu_label(label, index == selected)
-            padding = " " * (label_width - len(plain))
-            if index == selected:
-                markup = f"[bold {AMBER}]>===<[/]  {styled}{padding}"
-                raw = f">===<  {plain}{padding}"
-            else:
-                markup = f"[dim]{'.' * 5}[/]  {styled}{padding}"
-                raw = f".....  {plain}{padding}"
-            self.console.print(centered(self.console, markup, raw))
-        self.console.print("")
-        self.console.print(centered(self.console, f"[dim]{MENU_HINT}[/dim]", MENU_HINT))
+            if HAS_RICH:
+                stats = Table.grid(padding=(0, 3))
+                stats.add_column(style=AMBER_SOFT)
+                stats.add_column(style=STONE)
+                stats.add_row("Casting Model", "Three coins with yarrow odds")
+                stats.add_row("Show Trigrams", "on" if self.prefs.get("show_trigrams", True) else "off")
+                stats.add_row("Show Line Text", "on" if self.prefs.get("show_line_text", True) else "off")
+                self.console.print(Align.center(Panel(stats, title="Current State", border_style=AMBER, box=box.ASCII, padding=(0, 2), expand=False)))
+                self.console.print("")
+            label_width = max(len(item[1].replace("&", "")) for item in MENU_ITEMS)
+            for index, (_hotkey, label, _action) in enumerate(MENU_ITEMS):
+                styled, plain = _menu_label(label, index == selected)
+                padding = " " * (label_width - len(plain))
+                if index == selected:
+                    markup = f"[bold {AMBER}]>===<[/]  {styled}{padding}"
+                    raw = f">===<  {plain}{padding}"
+                else:
+                    markup = f"[dim]{'.' * 5}[/]  {styled}{padding}"
+                    raw = f".....  {plain}{padding}"
+                self.console.print(centered(self.console, markup, raw))
+            self.console.print("")
+            self.console.print(centered(self.console, f"[dim]{MENU_HINT}[/dim]", MENU_HINT))
+
+        render_frame(self.console, _render)
 
     def run(self) -> int:
         if not sys.stdin.isatty():
@@ -429,26 +433,28 @@ class IChingApp:
             page_size = max(8, terminal_rows() - 14)
             start, end = window_bounds(len(filtered), cursor, page_size)
             page_items = filtered[start:end]
-            clear_screen(self.console)
-            self.console.print(logo_banner(self.console, logo_lines=LOGO_LINES, taglines=TAGLINES, subtitle=f"hexagram browser  |  matches {len(filtered)}"))
-            self.console.print("")
-            table = Table(show_header=True, header_style=f"bold {AMBER}", box=box.ASCII, padding=(0, 1))
-            table.add_column("#", style="dim", width=4)
-            table.add_column("hexagram", style=AMBER_SOFT)
-            table.add_column("trigrams", style=STONE)
-            table.add_column("keywords", style=STONE)
-            for absolute_index, item in enumerate(page_items, start=start):
-                style = f"bold {AMBER}" if absolute_index == cursor else ""
-                table.add_row(
-                    str(item.number),
-                    item.name,
-                    f"{item.upper_trigram} / {item.lower_trigram}",
-                    ", ".join(item.keywords[:3]),
-                    style=style,
-                )
-            self.console.print(table)
-            self.console.print("")
-            self.console.print("[dim]j/k move  / search  enter view  q back[/dim]")
+            def _render() -> None:
+                self.console.print(logo_banner(self.console, logo_lines=LOGO_LINES, taglines=TAGLINES, subtitle=f"hexagram browser  |  matches {len(filtered)}"))
+                self.console.print("")
+                table = Table(show_header=True, header_style=f"bold {AMBER}", box=box.ASCII, padding=(0, 1))
+                table.add_column("#", style="dim", width=4)
+                table.add_column("hexagram", style=AMBER_SOFT)
+                table.add_column("trigrams", style=STONE)
+                table.add_column("keywords", style=STONE)
+                for absolute_index, item in enumerate(page_items, start=start):
+                    style = f"bold {AMBER}" if absolute_index == cursor else ""
+                    table.add_row(
+                        str(item.number),
+                        item.name,
+                        f"{item.upper_trigram} / {item.lower_trigram}",
+                        ", ".join(item.keywords[:3]),
+                        style=style,
+                    )
+                self.console.print(table)
+                self.console.print("")
+                self.console.print("[dim]j/k move  / search  enter view  q back[/dim]")
+
+            render_frame(self.console, _render)
             key = read_key()
             if key in ("UP", "k") and filtered:
                 cursor = (cursor - 1) % len(filtered)
@@ -482,26 +488,28 @@ class IChingApp:
             page_size = max(8, terminal_rows() - 14)
             start, end = window_bounds(len(consultations), cursor, page_size)
             page_items = consultations[start:end]
-            clear_screen(self.console)
-            self.console.print(logo_banner(self.console, logo_lines=LOGO_LINES, taglines=TAGLINES, subtitle=f"consultation history  |  showing {len(consultations)}"))
-            self.console.print("")
-            table = Table(show_header=True, header_style=f"bold {AMBER}", box=box.ASCII, padding=(0, 1))
-            table.add_column("#", style="dim", width=4)
-            table.add_column("when", style=STONE, width=18)
-            table.add_column("result", style=AMBER_SOFT)
-            table.add_column("query", style=STONE)
-            for absolute_index, item in enumerate(page_items, start=start):
-                style = f"bold {AMBER}" if absolute_index == cursor else ""
-                table.add_row(
-                    str(absolute_index + 1),
-                    _timestamp_text(item),
-                    _summary_hexagrams(item),
-                    str(item.query or "-"),
-                    style=style,
-                )
-            self.console.print(table)
-            self.console.print("")
-            self.console.print("[dim]j/k move  enter view  q back[/dim]")
+            def _render() -> None:
+                self.console.print(logo_banner(self.console, logo_lines=LOGO_LINES, taglines=TAGLINES, subtitle=f"consultation history  |  showing {len(consultations)}"))
+                self.console.print("")
+                table = Table(show_header=True, header_style=f"bold {AMBER}", box=box.ASCII, padding=(0, 1))
+                table.add_column("#", style="dim", width=4)
+                table.add_column("when", style=STONE, width=18)
+                table.add_column("result", style=AMBER_SOFT)
+                table.add_column("query", style=STONE)
+                for absolute_index, item in enumerate(page_items, start=start):
+                    style = f"bold {AMBER}" if absolute_index == cursor else ""
+                    table.add_row(
+                        str(absolute_index + 1),
+                        _timestamp_text(item),
+                        _summary_hexagrams(item),
+                        str(item.query or "-"),
+                        style=style,
+                    )
+                self.console.print(table)
+                self.console.print("")
+                self.console.print("[dim]j/k move  enter view  q back[/dim]")
+
+            render_frame(self.console, _render)
             key = read_key()
             if key in ("UP", "k"):
                 cursor = (cursor - 1) % len(consultations)
@@ -526,19 +534,21 @@ class IChingApp:
         cursor = 0
         while True:
             self.refresh()
-            clear_screen(self.console)
-            self.console.print(logo_banner(self.console, logo_lines=LOGO_LINES, taglines=TAGLINES, subtitle="preferences"))
-            self.console.print("")
-            table = Table(show_header=True, header_style=f"bold {AMBER}", box=box.ASCII, padding=(0, 1))
-            table.add_column("#", style="dim", width=4)
-            table.add_column("setting", style=AMBER_SOFT)
-            table.add_column("value", style=STONE)
-            for index, (key, label) in enumerate(options, start=1):
-                style = f"bold {AMBER}" if index - 1 == cursor else ""
-                table.add_row(str(index), label, str(self.prefs.get(key)), style=style)
-            self.console.print(table)
-            self.console.print("")
-            self.console.print("[dim]j/k move  enter edit/toggle  q back[/dim]")
+            def _render() -> None:
+                self.console.print(logo_banner(self.console, logo_lines=LOGO_LINES, taglines=TAGLINES, subtitle="preferences"))
+                self.console.print("")
+                table = Table(show_header=True, header_style=f"bold {AMBER}", box=box.ASCII, padding=(0, 1))
+                table.add_column("#", style="dim", width=4)
+                table.add_column("setting", style=AMBER_SOFT)
+                table.add_column("value", style=STONE)
+                for index, (key, label) in enumerate(options, start=1):
+                    style = f"bold {AMBER}" if index - 1 == cursor else ""
+                    table.add_row(str(index), label, str(self.prefs.get(key)), style=style)
+                self.console.print(table)
+                self.console.print("")
+                self.console.print("[dim]j/k move  enter edit/toggle  q back[/dim]")
+
+            render_frame(self.console, _render)
             key = read_key()
             if key in ("UP", "k"):
                 cursor = (cursor - 1) % len(options)

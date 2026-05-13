@@ -1593,6 +1593,65 @@ SPREADS: Final[dict[str, dict[str, str | list[str]]]] = {
         "positions": ["fire", "water", "air", "earth"],
         "description": "A four-card spread that reads the question through drive, feeling, thought, and practical embodiment.",
     },
+    "horseshoe": {
+        "name": "Horseshoe",
+        "positions": ["past_influences", "present_situation", "hidden_influences", "obstacles", "external_influences", "best_course_of_action", "likely_outcome"],
+        "description": "A seven-card arc from past roots through hidden forces and external pressures to clear guidance and outcome.",
+    },
+    "shadow_work": {
+        "name": "Shadow Work",
+        "positions": ["the_shadow_aspect", "root_cause", "how_it_manifests", "what_to_integrate", "next_step"],
+        "description": "A five-card spread for facing and integrating what has been repressed, avoided, or disowned.",
+    },
+    "year_ahead": {
+        "name": "Year Ahead",
+        "positions": [
+            "january",
+            "february",
+            "march",
+            "april",
+            "may",
+            "june",
+            "july",
+            "august",
+            "september",
+            "october",
+            "november",
+            "december",
+        ],
+        "description": "A twelve-card calendar spread for the arc of the coming year.",
+    },
+    "star": {
+        "name": "Star",
+        "positions": [
+            "present_situation",
+            "what_crosses_you",
+            "what_crowns_you",
+            "foundation",
+            "recent_past",
+            "near_future",
+            "your_role",
+            "external_influences",
+            "hopes_and_fears",
+            "where_this_leads",
+        ],
+        "description": "A ten-card spread combining Celtic Cross structure with soul-level perspective. For complex, multi-layered questions.",
+    },
+    "soul_path": {
+        "name": "Soul Path",
+        "positions": ["where_you_came_from", "what_you_carry", "your_core_gift", "your_challenge", "your_next_step"],
+        "description": "A five-card spread for identity, purpose, and the deeper arc of a person's journey.",
+    },
+    "new_moon_intention": {
+        "name": "New Moon Intention",
+        "positions": ["what_i_am_releasing", "what_i_am_calling_in", "what_supports_this", "the_action_step", "the_blessing"],
+        "description": "A five-card ritual spread for new moon, new beginnings, and conscious intention-setting.",
+    },
+    "relationship_deep": {
+        "name": "Relationship Deep",
+        "positions": ["your_energy", "their_energy", "the_bond", "what_strengthens", "what_challenges", "hidden_dynamic", "guidance"],
+        "description": "A seven-card spread for depth and nuance in any significant relationship — romantic, platonic, or creative.",
+    },
 }
 
 ALL_CARDS: Final[list[Card]] = MAJOR_ARCANA + MINOR_ARCANA
