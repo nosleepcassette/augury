@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import difflib
 import json
 import os
 import random
@@ -193,6 +194,7 @@ PENDING_ESCAPE_PREFIX = ""
 FRAME_CAPTURE_ACTIVE = False
 MENU_ITEMS = [
     ("n", "&New Reading", "new_reading"),
+    ("m", "&Manual Reading", "manual_reading"),
     ("d", "&Daily Card", "daily_card"),
     ("c", "&Card Browser", "card_browser"),
     ("h", "Reading &History", "reading_history"),
@@ -216,6 +218,52 @@ FILTER_OPTIONS = [
     ("swords", "Swords", "swords"),
     ("pentacles", "Pentacles", "pentacles"),
 ]
+INTERPRET_ENGINE_CHOICES = ("none", "hermes", "gemini", "nvidia-glm", "nvidia-glm-5.1", "nvidia")
+MANUAL_SPREAD_ORDER = (
+    "single",
+    "three-card",
+    "relationship",
+    "career",
+    "elemental",
+    "yes-no",
+    "celtic-cross",
+    "horseshoe",
+    "shadow-work",
+    "year-ahead",
+)
+THREE_CARD_VARIANTS = (
+    {
+        "slug": "past-present-future",
+        "name": "Past / Present / Future",
+        "positions": ["Past", "Present", "Future"],
+        "description": "The classic timeline spread.",
+    },
+    {
+        "slug": "situation-action-outcome",
+        "name": "Situation / Action / Outcome",
+        "positions": ["Situation", "Action", "Outcome"],
+        "description": "A practical three-step spread for choices and next moves.",
+    },
+    {
+        "slug": "mind-body-spirit",
+        "name": "Mind / Body / Spirit",
+        "positions": ["Mind", "Body", "Spirit"],
+        "description": "A check-in across thought, embodiment, and deeper alignment.",
+    },
+    {
+        "slug": "challenge-advice-outcome",
+        "name": "Challenge / Advice / Outcome",
+        "positions": ["Challenge", "Advice", "Outcome"],
+        "description": "A direct spread for obstacles, counsel, and likely result.",
+    },
+    {
+        "slug": "you-other-connection",
+        "name": "You / Other / Connection",
+        "positions": ["You", "Other", "Connection"],
+        "description": "A compact relationship spread for two sides and the field between them.",
+    },
+)
+THREE_CARD_LAYOUT_CHOICES = tuple(str(variant["slug"]) for variant in THREE_CARD_VARIANTS)
 
 
 @dataclass
@@ -297,6 +345,48 @@ STUB_SPREADS = {
             "Outcome",
         ],
         "description": "A classic ten-card spread for larger situations.",
+    },
+    "horseshoe": {
+        "name": "Horseshoe",
+        "positions": [
+            "Past influences",
+            "Present situation",
+            "Hidden influences",
+            "Obstacles",
+            "External influences",
+            "Best course of action",
+            "Likely outcome",
+        ],
+        "description": "A seven-card arc from past roots through hidden forces and external pressures to clear guidance and outcome.",
+    },
+    "shadow-work": {
+        "name": "Shadow Work",
+        "positions": [
+            "The shadow aspect",
+            "Root cause",
+            "How it manifests",
+            "What to integrate",
+            "Next step",
+        ],
+        "description": "A five-card spread for facing and integrating what has been repressed, avoided, or disowned.",
+    },
+    "year-ahead": {
+        "name": "Year Ahead",
+        "positions": [
+            "January",
+            "February",
+            "March",
+            "April",
+            "May",
+            "June",
+            "July",
+            "August",
+            "September",
+            "October",
+            "November",
+            "December",
+        ],
+        "description": "A twelve-card calendar spread for the arc of the coming year.",
     },
 }
 STUB_CARDS = [
@@ -753,6 +843,63 @@ def _all_spreads(custom_spreads: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return combined
 
 
+def _manual_spreads(custom_spreads: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    spreads = _all_spreads(custom_spreads)
+    by_slug = {spread["slug"]: spread for spread in spreads}
+    ordered = [by_slug.pop(slug) for slug in MANUAL_SPREAD_ORDER if slug in by_slug]
+    ordered.extend(by_slug.values())
+    return ordered
+
+
+def _manual_choice_key(index: int) -> str:
+    if 0 <= index <= 8:
+        return str(index + 1)
+    if index == 9:
+        return "0"
+    offset = index - 10
+    if 0 <= offset < 26:
+        return chr(ord("a") + offset)
+    return "-"
+
+
+def _manual_choice_index(key: str, total: int) -> int | None:
+    if key == "0":
+        index = 9
+    elif len(key) == 1 and key.isdigit() and key != "0":
+        index = int(key) - 1
+    elif len(key) == 1 and key.isalpha():
+        index = 10 + ord(key.lower()) - ord("a")
+    else:
+        return None
+    return index if 0 <= index < total else None
+
+
+def _resolve_three_card_variant(name: str) -> dict[str, Any]:
+    normalized = _normalize_slug(name)
+    for variant in THREE_CARD_VARIANTS:
+        if normalized in {
+            _normalize_slug(variant["slug"]),
+            _normalize_slug(variant["name"]),
+        }:
+            return dict(variant)
+    valid = ", ".join(str(variant["slug"]) for variant in THREE_CARD_VARIANTS)
+    raise ValueError(f"Unknown three-card layout '{name}'. Available layouts: {valid}")
+
+
+def _three_card_variant_spread(base_spread: dict[str, Any], variant: dict[str, Any]) -> dict[str, Any]:
+    spread = dict(base_spread)
+    spread.update(
+        {
+            "name": f"Three Card - {variant['name']}",
+            "slug": f"three-card-{variant['slug']}",
+            "positions": list(variant["positions"]),
+            "description": variant["description"],
+            "custom": True,
+        }
+    )
+    return spread
+
+
 def _resolve_spread(name: str, custom_spreads: list[dict[str, Any]]) -> dict[str, Any]:
     normalized = _normalize_slug(name)
     for spread in _all_spreads(custom_spreads):
@@ -1028,6 +1175,87 @@ def _draw_reading(spread: dict[str, Any], query: str | None, prefs: dict[str, An
     return reading
 
 
+def _position_label(position: Any) -> str:
+    raw = str(position).strip()
+    if not raw:
+        return "Card"
+    if "_" in raw or "-" in raw:
+        return raw.replace("_", " ").replace("-", " ").title()
+    return raw
+
+
+def _draw_manual_reading(spread: dict[str, Any], card_specs: list[str], query: str | None) -> Any:
+    if not spread.get("custom") and engine_module is not None and hasattr(engine_module, "draw_manual_reading"):
+        return engine_module.draw_manual_reading(spread["slug"], card_specs, query=query)
+
+    if len(card_specs) != len(spread["positions"]):
+        raise ValueError(
+            f"Spread '{spread['name']}' needs {len(spread['positions'])} cards, got {len(card_specs)}."
+        )
+    drawn_cls, reading_cls = _reading_classes()
+    drawn_cards = []
+    for position, spec in zip(spread["positions"], card_specs):
+        text = spec.strip()
+        reversed_card = False
+        for marker in (" rx", " reversed", " rev", " (r)", " (rx)"):
+            if text.lower().endswith(marker):
+                text = text[: -len(marker)].strip()
+                reversed_card = True
+                break
+        drawn_cards.append(
+            drawn_cls(
+                card=_lookup_card(text),
+                position_name=_position_label(position),
+                reversed=reversed_card,
+            )
+        )
+    reading = reading_cls(
+        spread_name=spread["name"],
+        query=query,
+        drawn_cards=drawn_cards,
+        timestamp=datetime.now(timezone.utc),
+        interpretation="",
+    )
+    reading.interpretation = _interpret_reading(reading)
+    return reading
+
+
+def _card_match_score(card: Any, query: str) -> float:
+    if not query:
+        return 1.0
+    needle = query.casefold().strip()
+    name = _card_name(card).casefold()
+    normalized_name = _normalize_slug(name).replace("-", " ")
+    if needle in name or needle in normalized_name:
+        return 2.0 + len(needle) / max(1, len(name))
+    compact_needle = _normalize_slug(needle).replace("-", "")
+    compact_name = _normalize_slug(name).replace("-", "")
+    if compact_needle and compact_needle in compact_name:
+        return 1.8
+    return difflib.SequenceMatcher(None, needle, name).ratio()
+
+
+def _filter_cards_for_query(cards: list[Any], query: str) -> list[Any]:
+    if not query:
+        return cards
+    scored = [(card, _card_match_score(card, query)) for card in cards]
+    matches = [(card, score) for card, score in scored if score >= 0.42]
+    matches.sort(key=lambda item: (-item[1], _card_name(item[0])))
+    return [card for card, _score in matches]
+
+
+def _card_picker_meta(card: Any) -> str:
+    arcana = _card_arcana(card)
+    if arcana == "major":
+        number = _card_number(card)
+        suffix = f" {number}" if number is not None else ""
+        return f"Major Arcana{suffix}"
+    suit = _card_suit(card) or "Minor"
+    number = _card_number(card)
+    rank = str(number) if number is not None else ""
+    return f"{suit}{(' ' + rank) if rank else ''}"
+
+
 def _card_payload(card: Any) -> dict[str, Any]:
     payload = _json_safe(card)
     if isinstance(payload, dict):
@@ -1158,7 +1386,9 @@ def _read_key() -> str:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 break
-            if not select.select([sys.stdin], [], [], remaining)[0]:
+            # Use fd directly (not sys.stdin) — sys.stdin has its own buffer that can hide
+            # bytes from select(), causing os.read() calls below to time out unnecessarily.
+            if not select.select([fd], [], [], remaining)[0]:
                 break
             chunk = os.read(fd, 16).decode(errors="ignore")
             if not chunk:
@@ -1182,7 +1412,10 @@ def _read_key() -> str:
     old = termios.tcgetattr(fd)
     try:
         tty.setraw(fd)
-        ch = sys.stdin.read(1)
+        # os.read bypasses Python's buffered IO layer. sys.stdin.read(1) would buffer the
+        # entire escape sequence (\x1b[A) internally, leaving the raw fd empty so that
+        # _read_escape_suffix's os.read calls find nothing and every arrow key returns "ESC".
+        ch = os.read(fd, 1).decode(errors="ignore")
         global PENDING_ESCAPE, PENDING_ESCAPE_PREFIX
         if PENDING_ESCAPE_PREFIX:
             seq = PENDING_ESCAPE_PREFIX + ch
@@ -1768,7 +2001,7 @@ class AuguryApp:
         while True:
             self.draw_main_menu(0)
             self.console.print("")
-            choice = self.prompt("choice [n/d/c/h/s/p/q]", "q").lower()
+            choice = self.prompt("choice [n/m/d/c/h/s/p/q]", "q").lower()
             mapping = {item[0]: item[2] for item in MENU_ITEMS}
             action = mapping.get(choice)
             if action is None:
@@ -1827,6 +2060,373 @@ class AuguryApp:
                 return None
             elif key in ("CTRL_C", "CTRL_D"):
                 return None
+
+    def _choose_spread_manual(self) -> dict[str, Any] | None:
+        spreads = _manual_spreads(self.custom_spread_defs)
+        index = 0
+        if not sys.stdin.isatty():
+            self.console.print("")
+            self.console.print("Manual Reading - Choose Spread")
+            for number, spread in enumerate(spreads, start=1):
+                key = _manual_choice_key(number - 1)
+                self.console.print(f"{key:>2}  {spread['name']} ({len(spread['positions'])} cards)")
+            choice = self.prompt("spread number", "2")
+            try:
+                selected = _manual_choice_index(choice, len(spreads))
+                if selected is None:
+                    selected = int(choice) - 1
+                return spreads[max(0, min(len(spreads) - 1, selected))]
+            except Exception:
+                return spreads[min(1, len(spreads) - 1)]
+
+        while True:
+            page_size = max(10, _terminal_rows() - 12)
+            start, end = _window_bounds(len(spreads), index, page_size)
+            page_spreads = spreads[start:end]
+
+            def _render() -> None:
+                self.console.print(_banner(self.console, "manual reading  -  choose spread"))
+                self.console.print("")
+                if HAS_RICH:
+                    table = Table(show_header=False, box=None, padding=(0, 2))
+                    table.add_column("key", style="dim", width=4)
+                    table.add_column("spread", style=AMBER_SOFT, min_width=20)
+                    table.add_column("cards", style=STONE, width=10)
+                    for absolute_index, spread in enumerate(page_spreads, start=start):
+                        key = _manual_choice_key(absolute_index)
+                        style = f"bold {AMBER}" if absolute_index == index else ""
+                        table.add_row(key, spread["name"], f"({len(spread['positions'])} cards)", style=style)
+                    self.console.print(table)
+                else:
+                    for absolute_index, spread in enumerate(page_spreads, start=start):
+                        key = _manual_choice_key(absolute_index)
+                        cursor_mark = ">" if absolute_index == index else " "
+                        self.console.print(f"{cursor_mark} {key:>2}  {spread['name']} ({len(spread['positions'])} cards)")
+                self.console.print("")
+                self.console.print(
+                    "[dim]j/k move  key choose  enter confirm  q cancel[/dim]"
+                    if HAS_RICH
+                    else "j/k move, key choose, enter confirm, q cancel"
+                )
+
+            _render_frame(self.console, _render)
+            key = _read_key()
+            if key in ("UP", "k"):
+                index = (index - 1) % len(spreads)
+            elif key in ("DOWN", "j"):
+                index = (index + 1) % len(spreads)
+            elif key in ("\r", "\n"):
+                return spreads[index]
+            elif key == "q" or key in ("CTRL_C", "CTRL_D", "ESC"):
+                return None
+            else:
+                selected = _manual_choice_index(key, len(spreads))
+                if selected is not None:
+                    return spreads[selected]
+
+    def _choose_three_card_variant(self, base_spread: dict[str, Any]) -> dict[str, Any] | None:
+        index = 0
+        if not sys.stdin.isatty():
+            self.console.print("")
+            self.console.print("Three Card - Choose Layout")
+            for number, variant in enumerate(THREE_CARD_VARIANTS, start=1):
+                self.console.print(f"{number:>2}  {variant['name']}")
+            choice = self.prompt("layout number", "1")
+            try:
+                selected = max(0, min(len(THREE_CARD_VARIANTS) - 1, int(choice) - 1))
+            except Exception:
+                selected = 0
+            return _three_card_variant_spread(base_spread, THREE_CARD_VARIANTS[selected])
+
+        while True:
+            def _render() -> None:
+                self.console.print(_banner(self.console, "manual reading  -  three card layout"))
+                self.console.print("")
+                if HAS_RICH:
+                    table = Table(show_header=False, box=None, padding=(0, 2))
+                    table.add_column("cursor", style=AMBER, width=2)
+                    table.add_column("key", style="dim", width=4)
+                    table.add_column("layout", style=AMBER_SOFT, min_width=26)
+                    table.add_column("description", style=STONE)
+                    for variant_index, variant in enumerate(THREE_CARD_VARIANTS):
+                        marker = ">" if variant_index == index else " "
+                        style = f"bold {AMBER}" if variant_index == index else ""
+                        table.add_row(marker, str(variant_index + 1), variant["name"], variant["description"], style=style)
+                    self.console.print(table)
+                else:
+                    for variant_index, variant in enumerate(THREE_CARD_VARIANTS):
+                        cursor_mark = ">" if variant_index == index else " "
+                        self.console.print(f"{cursor_mark} {variant_index + 1}. {variant['name']} - {variant['description']}")
+                self.console.print("")
+                self.console.print(
+                    "[dim]arrows/j/k move  enter confirm  number choose  q cancel[/dim]"
+                    if HAS_RICH
+                    else "arrows/j/k move, enter confirm, number choose, q cancel"
+                )
+
+            _render_frame(self.console, _render)
+            key = _read_key()
+            if key in ("UP", "k"):
+                index = (index - 1) % len(THREE_CARD_VARIANTS)
+                continue
+            elif key in ("DOWN", "j"):
+                index = (index + 1) % len(THREE_CARD_VARIANTS)
+                continue
+            elif key in ("\r", "\n"):
+                selected = index
+            elif key == "q" or key in ("CTRL_C", "CTRL_D", "ESC"):
+                return None
+            elif key.isdigit() and key != "0":
+                selected = int(key) - 1
+                if not 0 <= selected < len(THREE_CARD_VARIANTS):
+                    continue
+            else:
+                continue
+
+            return _three_card_variant_spread(base_spread, THREE_CARD_VARIANTS[selected])
+
+    def _query_prompt_manual(self) -> str | None:
+        _clear_screen(self.console)
+        self.console.print(_banner(self.console, "manual reading  -  question"))
+        self.console.print("")
+        self.console.print("Your question (optional):")
+        value = self.prompt(">", "")
+        return value or None
+
+    def _choose_backend(self) -> str:
+        options = [
+            ("n", "none", "None (no interpretation)"),
+            ("h", "hermes", "Hermes"),
+            ("g", "gemini", "Gemini (API)"),
+            ("v", "nvidia-glm", "NVIDIA NIM - GLM-5"),
+        ]
+        cursor = 0
+        if not sys.stdin.isatty():
+            choice = self.prompt("interpret with [n/h/g/v]", "n").lower()
+            for hotkey, engine, _label in options:
+                if choice == hotkey or choice == engine:
+                    return engine
+            return "none"
+        while True:
+            def _render() -> None:
+                self.console.print(_banner(self.console, "manual reading  -  interpretation"))
+                self.console.print("")
+                if HAS_RICH:
+                    table = Table(show_header=False, box=None, padding=(0, 2))
+                    table.add_column("key", style="dim", width=4)
+                    table.add_column("backend", style=AMBER_SOFT)
+                    for index, (hotkey, _engine, label) in enumerate(options):
+                        style = f"bold {AMBER}" if index == cursor else ""
+                        table.add_row(hotkey, label, style=style)
+                    self.console.print(table)
+                else:
+                    for index, (hotkey, _engine, label) in enumerate(options):
+                        cursor_mark = ">" if index == cursor else " "
+                        self.console.print(f"{cursor_mark} {hotkey}  {label}")
+                self.console.print("")
+                self.console.print("[dim]n/h/g/v select  j/k move  enter confirm[/dim]" if HAS_RICH else "n/h/g/v select, j/k move, enter confirm")
+
+            _render_frame(self.console, _render)
+            key = _read_key().lower()
+            if key in ("up", "k"):
+                cursor = (cursor - 1) % len(options)
+            elif key in ("down", "j"):
+                cursor = (cursor + 1) % len(options)
+            elif key in ("\r", "\n"):
+                return options[cursor][1]
+            elif key in {"q", "ctrl_c", "ctrl_d", "esc"}:
+                return "none"
+            else:
+                for hotkey, engine, _label in options:
+                    if key == hotkey:
+                        return engine
+
+    def _fuzzy_card_picker(self, position: str, position_index: int, total: int) -> str | None:
+        cards = _get_all_cards()
+        cursor = 0
+        search_query = ""
+        search_active = False
+        reversed_names: set[str] = set()
+        # Drain any stale escape state left by prior screens so it doesn't eat our first keypress.
+        global PENDING_ESCAPE, PENDING_ESCAPE_PREFIX
+        PENDING_ESCAPE = False
+        PENDING_ESCAPE_PREFIX = ""
+
+        if not sys.stdin.isatty():
+            label = _position_label(position)
+            while True:
+                value = self.prompt(f"Position {position_index} ({label})", "")
+                if not value:
+                    return None
+                try:
+                    _lookup_card(re.sub(r"\s+(rx|rev|reversed)$", "", value, flags=re.IGNORECASE).strip())
+                    return value
+                except KeyError as exc:
+                    self.notice(str(exc), "red")
+
+        while True:
+            filtered = _filter_cards_for_query(cards, search_query)
+            if filtered:
+                cursor = max(0, min(cursor, len(filtered) - 1))
+            else:
+                cursor = 0
+            start, end = _window_bounds(len(filtered), cursor, 8)
+            page_cards = filtered[start:end]
+
+            def _render() -> None:
+                self.console.print(_banner(self.console, "manual card picker"))
+                self.console.print("")
+                self.console.print(f"Position {position_index} of {total}: \"{_position_label(position)}\"")
+                self.console.print("")
+                search_cursor = "_" if search_active else ""
+                self.console.print(f"Search: {search_query}{search_cursor}")
+                self.console.print("")
+                if not page_cards:
+                    self.console.print("[dim](no matching cards)[/dim]" if HAS_RICH else "(no matching cards)")
+                elif HAS_RICH:
+                    table = Table(show_header=False, box=None, padding=(0, 2))
+                    table.add_column("cursor", style=AMBER, width=2)
+                    table.add_column("card", style=AMBER_SOFT, min_width=24)
+                    table.add_column("meta", style=STONE)
+                    for absolute_index, card in enumerate(page_cards, start=start):
+                        name = _card_name(card)
+                        marker = ">" if absolute_index == cursor else " "
+                        suffix = " [RX]" if name in reversed_names else ""
+                        style = f"bold {AMBER}" if absolute_index == cursor else ""
+                        table.add_row(marker, f"{name}{suffix}", f"({_card_picker_meta(card)})", style=style)
+                    self.console.print(table)
+                else:
+                    for absolute_index, card in enumerate(page_cards, start=start):
+                        name = _card_name(card)
+                        marker = ">" if absolute_index == cursor else " "
+                        suffix = " [RX]" if name in reversed_names else ""
+                        self.console.print(f"{marker} {name}{suffix} ({_card_picker_meta(card)})")
+                if filtered and len(filtered) > len(page_cards):
+                    self.console.print("")
+                    self.console.print(f"[dim]showing {start + 1}-{end} of {len(filtered)}[/dim]" if HAS_RICH else f"showing {start + 1}-{end} of {len(filtered)}")
+                if filtered:
+                    highlighted = _card_name(filtered[cursor])
+                    orientation = "REVERSED" if highlighted in reversed_names else "UPRIGHT"
+                    toggle_hint = "tab toggles highlighted card" if search_active else "r or tab toggles highlighted card"
+                    self.console.print("")
+                    self.console.print(
+                        f"[bold {AMBER}]Orientation:[/] {orientation}  [dim]({toggle_hint})[/dim]"
+                        if HAS_RICH
+                        else f"Orientation: {orientation} ({toggle_hint})"
+                    )
+                self.console.print("")
+                if search_active:
+                    hint = "search mode: type edits  arrows move  tab reverse  enter select  backspace delete  esc clear"
+                else:
+                    hint = "j/k or arrows move  / search  type quick-search  r/tab reverse  enter select  esc clear  q cancel"
+                self.console.print(f"[dim]{hint}[/dim]" if HAS_RICH else hint)
+
+            _render_frame(self.console, _render)
+            key = _read_key()
+            if search_active:
+                if key in ("CTRL_C", "CTRL_D"):
+                    return None
+                if key in ("UP",) and filtered:
+                    cursor = (cursor - 1) % len(filtered)
+                elif key in ("DOWN",) and filtered:
+                    cursor = (cursor + 1) % len(filtered)
+                elif key in ("\r", "\n") and filtered:
+                    name = _card_name(filtered[cursor])
+                    return f"{name} rx" if name in reversed_names else name
+                elif key in ("ESC",):
+                    # Drain PENDING_ESCAPE so the next keypress isn't silently swallowed.
+                    PENDING_ESCAPE = False
+                    PENDING_ESCAPE_PREFIX = ""
+                    search_query = ""
+                    search_active = False
+                    cursor = 0
+                elif key in ("\x7f", "\b"):
+                    search_query = search_query[:-1]
+                    cursor = 0
+                    if not search_query:
+                        search_active = False
+                elif key in ("r", "\t") and filtered:
+                    # Toggle reversed — same hotkey as normal mode so muscle memory carries over.
+                    name = _card_name(filtered[cursor])
+                    if name in reversed_names:
+                        reversed_names.remove(name)
+                    else:
+                        reversed_names.add(name)
+                elif len(key) == 1 and key.isprintable():
+                    search_query += key
+                    cursor = 0
+                continue
+
+            if key in ("UP", "k") and filtered:
+                cursor = (cursor - 1) % len(filtered)
+            elif key in ("DOWN", "j") and filtered:
+                cursor = (cursor + 1) % len(filtered)
+            elif key == "/":
+                search_active = True
+                cursor = 0
+            elif key in ("ESC",):
+                # Drain PENDING_ESCAPE to prevent the next keypress being silently eaten.
+                PENDING_ESCAPE = False
+                PENDING_ESCAPE_PREFIX = ""
+                if search_query:
+                    search_query = ""
+                    cursor = 0
+                else:
+                    return None
+            elif key in ("\x7f", "\b"):
+                search_query = search_query[:-1]
+                cursor = 0
+            elif key in ("r", "\t") and filtered:
+                name = _card_name(filtered[cursor])
+                if name in reversed_names:
+                    reversed_names.remove(name)
+                else:
+                    reversed_names.add(name)
+            elif key in ("\r", "\n") and filtered:
+                name = _card_name(filtered[cursor])
+                return f"{name} rx" if name in reversed_names else name
+            elif key == "q" or key in ("CTRL_C", "CTRL_D"):
+                return None
+            elif len(key) == 1 and key.isprintable():
+                search_query += key
+                search_active = True
+                cursor = 0
+
+    def manual_reading(self) -> None:
+        spread = self._choose_spread_manual()
+        if spread is None:
+            return
+        if spread.get("slug") == "three-card":
+            spread = self._choose_three_card_variant(spread)
+            if spread is None:
+                return
+        query = self._query_prompt_manual()
+        card_specs: list[str] = []
+        positions = list(spread["positions"])
+        for index, position in enumerate(positions, start=1):
+            spec = self._fuzzy_card_picker(str(position), index, len(positions))
+            if spec is None:
+                return
+            card_specs.append(spec)
+        backend = self._choose_backend()
+        try:
+            reading = _draw_manual_reading(spread, card_specs, query)
+        except (KeyError, ValueError) as exc:
+            self.notice(f"Manual reading failed: {exc}", "red")
+            self.pause()
+            return
+
+        llm_text: str | None = None
+        if backend != "none":
+            from .interpreter import interpret_tarot
+
+            try:
+                llm_text = interpret_tarot(_reading_to_json(reading), query=query, engine=backend)
+            except Exception as exc:
+                llm_text = f"{backend} interpretation failed: {exc}"
+            if llm_text is None:
+                llm_text = f"{backend} interpretation unavailable: missing API key or backend configuration."
+        _show_reading(self.console, reading, "manual reading", llm_text=llm_text)
 
     def new_reading(self) -> None:
         spread = self.choose_spread(self.prefs.get("default_spread", "three-card"))
@@ -2552,29 +3152,50 @@ def _run_read_command(args: argparse.Namespace) -> int:
 
     prefs = _load_prefs()
     custom_spreads = _load_custom_spreads()
-    spread = _resolve_spread(args.spread or str(prefs.get("default_spread", "three-card")), custom_spreads)
-
     manual_cards = getattr(args, "manual", None)
-    if manual_cards:
-        from . import engine as engine_module
-        card_specs = [c.strip() for c in manual_cards.split(",") if c.strip()]
+    spread_name = args.spread or ("three-card" if manual_cards is not None else str(prefs.get("default_spread", "three-card")))
+    spread = _resolve_spread(spread_name, custom_spreads)
+    layout = getattr(args, "layout", None)
+    if layout:
+        if spread.get("slug") != "three-card":
+            print("--layout is only valid with --spread three-card.", file=sys.stderr)
+            return 1
         try:
-            reading = engine_module.draw_manual_reading(
-                spread_name=args.spread or str(prefs.get("default_spread", "three-card")),
-                card_specs=card_specs,
-                query=args.query,
-            )
+            spread = _three_card_variant_spread(spread, _resolve_three_card_variant(layout))
         except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
+
+    if manual_cards is not None:
+        if isinstance(manual_cards, str) and manual_cards.strip():
+            card_specs = [c.strip() for c in manual_cards.split(",") if c.strip()]
+        else:
+            card_specs = []
+            for index, position in enumerate(spread["positions"], start=1):
+                try:
+                    print(f"Position {index} ({_position_label(position)}): > ", end="", file=sys.stderr, flush=True)
+                    value = input().strip()
+                except (EOFError, KeyboardInterrupt):
+                    print("Manual reading cancelled.", file=sys.stderr)
+                    return 1
+                if not value:
+                    print("Manual reading cancelled: empty card entry.", file=sys.stderr)
+                    return 1
+                card_specs.append(value)
+        try:
+            reading = _draw_manual_reading(spread, card_specs, args.query)
+        except (KeyError, ValueError) as exc:
             print(f"Error: {exc}", file=sys.stderr)
             return 1
     else:
         reading = _draw_reading(spread, args.query, prefs)
-    if not args.no_save:
+    should_save = bool(not args.no_save and manual_cards is None)
+    if should_save:
         _save_reading(reading)
     reading_json = _reading_to_json(reading)
     payload = dict(reading_json)
-    payload["saved"] = not args.no_save
-    payload["saved_to"] = None if args.no_save else str(READINGS_PATH)
+    payload["saved"] = should_save
+    payload["saved_to"] = str(READINGS_PATH) if should_save else None
 
     with_astrology = getattr(args, "with_astrology", False)
     profile_name = getattr(args, "profile", None) or getattr(args, "mirror", None)
@@ -2636,15 +3257,21 @@ def _run_read_command(args: argparse.Namespace) -> int:
             console.print("")
 
     llm_text: str | None = None
-    if args.interpret:
+    interpret_engine = getattr(args, "interpret", None)
+    if manual_cards is not None and interpret_engine is None:
+        interpret_engine = "gemini"
+    if interpret_engine and interpret_engine != "none":
         console.print(f"[{AMBER}]Generating deep interpretation…[/]" if HAS_RICH else "Generating deep interpretation...")
-        if sky_text:
-            # Pass sky context into combined prompt via tarot interpret
-            reading_json_with_sky = dict(reading_json)
-            reading_json_with_sky["current_sky"] = sky_text
-            llm_text = interpret_tarot(reading_json_with_sky, query=args.query)
-        else:
-            llm_text = interpret_tarot(reading_json, query=args.query)
+        try:
+            if sky_text:
+                # Pass sky context into combined prompt via tarot interpret
+                reading_json_with_sky = dict(reading_json)
+                reading_json_with_sky["current_sky"] = sky_text
+                llm_text = interpret_tarot(reading_json_with_sky, query=args.query, engine=interpret_engine)
+            else:
+                llm_text = interpret_tarot(reading_json, query=args.query, engine=interpret_engine)
+        except Exception as exc:
+            llm_text = f"{interpret_engine} interpretation failed: {exc}"
         if llm_text is None:
             console.print(f"[dim]No API key available — showing native interpretation.[/dim]" if HAS_RICH else "No API key — native interpretation only.")
     _show_reading(console, reading, "reading", llm_text=llm_text)
@@ -2868,14 +3495,38 @@ def _build_parser() -> argparse.ArgumentParser:
 
     read_parser = subparsers.add_parser("read", help="Draw a reading")
     read_parser.add_argument("--spread", default=None, help="Spread name or slug")
+    read_parser.add_argument(
+        "--layout",
+        choices=THREE_CARD_LAYOUT_CHOICES,
+        default=None,
+        help="Three-card layout variant; only valid with --spread three-card.",
+    )
     read_parser.add_argument("--query", default=None, help="Question or reading prompt")
     read_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
-    read_parser.add_argument("--interpret", action="store_true", help="Generate LLM deep interpretation")
+    read_parser.add_argument(
+        "--interpret",
+        nargs="?",
+        const="gemini",
+        default=None,
+        choices=INTERPRET_ENGINE_CHOICES,
+        help="Generate LLM deep interpretation with backend: none, hermes, gemini, nvidia-glm.",
+    )
     read_parser.add_argument("--with-astrology", action="store_true", help="Include current sky from astrolog")
     read_parser.add_argument("--profile", default=None, help="Use a named client/mirror profile")
     read_parser.add_argument("--mirror", default=None, help="Alias for --profile")
     read_parser.add_argument("--no-save", action="store_true", help="Do not persist the reading to history")
-    read_parser.add_argument("--manual", default=None, metavar="CARDS", help="Manual reading: comma-separated card names (e.g. 'Two of Swords, Two of Pentacles, Page of Cups'). Append 'rx' for reversed.")
+    read_parser.add_argument(
+        "--manual",
+        nargs="?",
+        const=True,
+        default=None,
+        metavar="CARDS",
+        help=(
+            "Enter cards manually from a physical spread. Optionally pass comma-separated card names; "
+            "append 'rx' for reversed. Use --spread to choose layout, --layout for three-card variants, "
+            "--interpret for LLM backend."
+        ),
+    )
 
     daily_parser = subparsers.add_parser("daily", help="Draw the daily card")
     daily_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
@@ -2942,10 +3593,35 @@ def _build_parser() -> argparse.ArgumentParser:
 
     tarot_read_parser = tarot_subparsers.add_parser("read", help="Draw a tarot reading")
     tarot_read_parser.add_argument("--spread", default=None, help="Spread name or slug")
+    tarot_read_parser.add_argument(
+        "--layout",
+        choices=THREE_CARD_LAYOUT_CHOICES,
+        default=None,
+        help="Three-card layout variant; only valid with --spread three-card.",
+    )
     tarot_read_parser.add_argument("--query", default=None, help="Question or reading prompt")
     tarot_read_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
-    tarot_read_parser.add_argument("--interpret", action="store_true", help="LLM narrative mode stub")
+    tarot_read_parser.add_argument(
+        "--interpret",
+        nargs="?",
+        const="gemini",
+        default=None,
+        choices=INTERPRET_ENGINE_CHOICES,
+        help="Generate LLM deep interpretation with backend: none, hermes, gemini, nvidia-glm.",
+    )
     tarot_read_parser.add_argument("--no-save", action="store_true", help="Do not persist the reading to history")
+    tarot_read_parser.add_argument(
+        "--manual",
+        nargs="?",
+        const=True,
+        default=None,
+        metavar="CARDS",
+        help=(
+            "Enter cards manually from a physical spread. Optionally pass comma-separated card names; "
+            "append 'rx' for reversed. Use --spread to choose layout, --layout for three-card variants, "
+            "--interpret for LLM backend."
+        ),
+    )
 
     tarot_daily_parser = tarot_subparsers.add_parser("daily", help="Draw the daily card")
     tarot_daily_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
@@ -2998,11 +3674,17 @@ def _build_parser() -> argparse.ArgumentParser:
     render_parser.add_argument("--count", type=int, default=None, metavar="N",
     help="Exact number of story/post slides (redistributes content)")
     render_parser.add_argument("--max-count", type=int, default=None, metavar="N",
-    help="Maximum number of story/post slides (merges if exceeded)")
+    help="Maximum number of story/post slides (budgets content if exceeded)")
+    render_parser.add_argument("--cover", action="store_true",
+    help="Prepend a standalone cover slide")
     render_parser.add_argument("--by-section", action="store_true",
     help="Split by headings and render each section independently")
-    render_parser.add_argument("--section-level", type=int, default=2, metavar="N",
-    help="Heading level to split on for --by-section (default: 2)")
+    render_parser.add_argument("--section-level", default="2", metavar="N|auto",
+    help="Heading level to split on for --by-section (default: 2; use auto to detect)")
+    render_parser.add_argument("--preview", action="store_true",
+    help="Dry run: print pagination stats without rendering")
+    render_parser.add_argument("--slide-footer", action="store_true",
+    help="Add slide number and doc title footer to story/post slides")
 
     return parser
 
@@ -3055,10 +3737,16 @@ def _run_render_command(args) -> int:
         cmd += ["--count", str(args.count)]
     if getattr(args, "max_count", None) is not None:
         cmd += ["--max-count", str(args.max_count)]
+    if getattr(args, "cover", False):
+        cmd.append("--cover")
     if getattr(args, "by_section", False):
         cmd.append("--by-section")
-    if getattr(args, "section_level", None) is not None and args.section_level != 2:
+    if getattr(args, "section_level", None) is not None and str(args.section_level) != "2":
         cmd += ["--section-level", str(args.section_level)]
+    if getattr(args, "preview", False):
+        cmd.append("--preview")
+    if getattr(args, "slide_footer", False):
+        cmd.append("--slide-footer")
     return subprocess.run(cmd, env=os.environ.copy()).returncode
 
 

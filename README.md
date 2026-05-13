@@ -83,7 +83,7 @@ On the CLI side, `augury iching ...` and standalone `iching ...` both expose cas
 - Built-in I Ching casting model using three coins with yarrow-stalk probabilities
 - Combined reading flow that runs one query through both backends, with a tarot-defaults vs. configure-tarot picker
 - CLI commands for tarot via `augury read`, `augury daily`, `augury card`, and namespaced tarot commands via `augury tarot ...`
-- Manual reading mode: log physical card pulls with `--manual` and get full interpretation pipeline
+- Manual reading mode for physical card pulls in the TUI or CLI, with reversed cards and optional LLM interpretation
 - Full I Ching CLI via `augury iching ...` and standalone `iching ...`
 - Combined CLI via `augury combined ...`
 - Markdown rendering via `augury render` and `oracle-render`
@@ -148,6 +148,12 @@ Log a reading from a physical deck:
 
 ```bash
 augury read --manual "Two of Swords, Two of Pentacles, Page of Cups" --query "What about this decision?"
+```
+
+Run an interactive manual reading from the CLI:
+
+```bash
+augury read --manual --spread celtic-cross --query "What is blocking me?" --interpret hermes
 ```
 
 Emit machine-readable JSON without writing to history:
@@ -217,6 +223,24 @@ Run setup and optionally install stable launchers:
 augury configure
 ```
 
+## Manual Reading
+
+Manual reading mode lets Augury interpret cards you already pulled from a physical deck. In the TUI, open Tarot and press `m` for Manual Reading, then choose a spread, enter the question, search/select each card, mark reversals, and choose an interpretation backend.
+
+From the CLI, use `--manual` as an interactive flag or pass comma-separated card names directly:
+
+```bash
+augury read --manual --spread single --query "What is the center?"
+augury read --manual "Two of Swords, Two of Pentacles rx, Page of Cups" --spread three-card --interpret none
+augury read --manual "The Fool, Queen of Cups rx, King of Cups" --spread three-card --layout situation-action-outcome --interpret none
+```
+
+Append `rx`, `rev`, or `reversed` to mark reversed cards. Manual readings are not written to history; they are meant for physical-deck logging and immediate interpretation.
+
+Available manual spreads include `single`, `three-card`, `relationship`, `career`, `elemental`, `yes-no`, `celtic-cross`, `horseshoe`, `shadow-work`, and `year-ahead`, plus custom spreads. Choosing `three-card` in the TUI opens layout variants: past/present/future, situation/action/outcome, mind/body/spirit, challenge/advice/outcome, and you/other/connection. On the CLI, use `--layout` with one of `past-present-future`, `situation-action-outcome`, `mind-body-spirit`, `challenge-advice-outcome`, or `you-other-connection`.
+
+In the TUI picker, press `/` to enter search mode for card names, including names that start with navigation keys like Queen, King, or Justice. Press `r` or `tab` in either navigation or search mode to toggle the highlighted card between upright and reversed. Interpretation backends for tarot readings are `none`, `hermes`, `gemini`, `nvidia-glm`, `nvidia-glm-5.1`, and `nvidia`.
+
 ## Rendering
 
 Augury ships with a markdown renderer for turning readings, notes, or exported text into styled PNG/PDF assets.
@@ -281,8 +305,8 @@ PYTHONPATH=src python -m augury
 
 ## TODO
 
-- **`--manual` spread inference:** When `--spread` is not specified with `--manual`, the system defaults to `three-card`. This is fine for the common case but silently errors if you pass a different number of cards without specifying the spread. Quick fix: require `--spread` when using `--manual`. Real fix: if card count matches exactly one built-in spread, infer it; if it matches multiple (e.g., two different 5-card spreads), require `--spread` explicitly and print the candidates.
-- Replace the current `--interpret` stub with a real optional narrative/LLM mode
+- Add manual-reading spread inference from card count when `--spread` is omitted and the count maps cleanly to one spread.
+- Replace the daily-card `--interpret` stub with the real optional narrative/LLM mode used by tarot readings.
 - Expand export/import support for readings and custom spreads
 - Add data migration tooling from older private/local layouts
 - Add broader automated coverage for the full-screen TUI interaction paths
